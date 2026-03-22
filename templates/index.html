@@ -1,0 +1,1224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job Search Config</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; padding-top: 56px; }
+    .navbar { background: #1a1a2e !important; }
+    .navbar-brand { color: #e0e0e0 !important; font-weight: 600; letter-spacing: .5px; }
+    #dirty-banner { display: none; background: #fff3cd; border-bottom: 1px solid #ffc107;
+      padding: 6px 16px; font-size: .875rem; position: fixed; top: 56px; left: 0; right: 0; z-index: 1020; }
+    #dirty-banner.show { display: block; }
+    .tab-content { padding-top: 24px; }
+    .nav-tabs .nav-link { color: #495057; }
+    .nav-tabs .nav-link.active { font-weight: 600; }
+
+    /* Tag input */
+    .tag-input-wrap {
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+      border: 1px solid #dee2e6; border-radius: .375rem; padding: 6px 10px;
+      background: #fff; min-height: 42px; cursor: text;
+    }
+    .tag-input-wrap:focus-within { border-color: #86b7fe; box-shadow: 0 0 0 .25rem rgba(13,110,253,.25); }
+    .tag-badge { display: flex; align-items: center; gap: 4px; background: #e9ecef;
+      border-radius: .25rem; padding: 2px 8px; font-size: .8125rem; }
+    .tag-badge button { background: none; border: none; padding: 0; line-height: 1;
+      color: #6c757d; cursor: pointer; font-size: 1rem; }
+    .tag-badge button:hover { color: #dc3545; }
+    .tag-text-input { border: none; outline: none; flex: 1; min-width: 120px;
+      font-size: .875rem; background: transparent; }
+
+    /* Source card toggle */
+    .source-card.disabled-source .card-body { opacity: .45; pointer-events: none; }
+    .source-card .card-header { background: #fff; }
+
+    /* Bullet rows */
+    .bullet-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .drag-handle { cursor: grab; color: #adb5bd; user-select: none; font-size: 1.1rem; }
+    .drag-handle:active { cursor: grabbing; }
+    .bullet-row.drag-over { border-top: 2px solid #0d6efd; }
+
+    /* Cleanup flow diagram */
+    .flow-diagram { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .flow-box { background: #fff; border: 2px solid #dee2e6; border-radius: .5rem;
+      padding: 12px 20px; text-align: center; min-width: 120px; }
+    .flow-box label { display: block; font-size: .75rem; color: #6c757d; margin-bottom: 4px; }
+    .flow-box input { width: 80px; text-align: center; border: none; border-bottom: 2px solid #0d6efd;
+      outline: none; font-size: 1.5rem; font-weight: 700; background: transparent; }
+    .flow-arrow { font-size: 1.5rem; color: #adb5bd; }
+
+    /* Setup code blocks */
+    .code-block-wrap { position: relative; }
+    .code-block-wrap pre { background: #1e1e2e; color: #cdd6f4; border-radius: .5rem;
+      padding: 14px 16px; font-size: .8125rem; overflow-x: auto; }
+    .copy-btn { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2); color: #cdd6f4; border-radius: .25rem;
+      padding: 2px 10px; font-size: .75rem; cursor: pointer; }
+    .copy-btn:hover { background: rgba(255,255,255,.2); }
+
+    /* Toast */
+    .toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; }
+
+    #main-tabs { margin-top: 16px; }
+    body.has-dirty { padding-top: 84px; }
+
+    /* Navbar settings icon */
+    .navbar-settings-btn { color: #adb5bd !important; font-size: 1.1rem; text-decoration: none; line-height: 1; }
+    .navbar-settings-btn:hover { color: #fff !important; }
+  </style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark fixed-top px-3 py-2 d-flex justify-content-between align-items-center">
+  <div class="d-flex align-items-center gap-3">
+    <span class="navbar-brand mb-0">Job Search Config</span>
+    <a href="#" class="navbar-settings-btn" title="Settings" onclick="openSetupModal(); return false;">&#9881;</a>
+  </div>
+  <button id="save-btn" class="btn btn-primary btn-sm px-4" onclick="saveConfig()">Save All Changes</button>
+</nav>
+
+<!-- Dirty banner -->
+<div id="dirty-banner">Unsaved changes — click <strong>Save All Changes</strong> to apply.</div>
+
+<div class="container-lg py-3">
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs" id="main-tabs">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-profile">Profile</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sources">Sources</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-search">Search</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scoring">Scoring</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-cleanup">Cleanup</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-setup">Setup</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ═══════════════════════════════════════════════════════ PROFILE TAB -->
+    <div class="tab-pane fade show active" id="tab-profile">
+
+      <!-- Contact -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Contact</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6"><label class="form-label">Name</label><input id="p-name" class="form-control" oninput="markDirty()"></div>
+            <div class="col-md-6"><label class="form-label">Title</label><input id="p-title" class="form-control" oninput="markDirty()"></div>
+            <div class="col-md-6"><label class="form-label">Email</label><input id="p-email" class="form-control" type="email" oninput="markDirty()"></div>
+            <div class="col-md-6"><label class="form-label">Phone</label><input id="p-phone" class="form-control" oninput="markDirty()"></div>
+            <div class="col-md-4"><label class="form-label">Location</label><input id="p-location" class="form-control" oninput="markDirty()"></div>
+            <div class="col-md-4"><label class="form-label">LinkedIn URL</label><input id="p-linkedin" class="form-control" oninput="markDirty()"></div>
+            <div class="col-md-4"><label class="form-label">GitHub URL</label><input id="p-github" class="form-control" oninput="markDirty()"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Summary</div>
+        <div class="card-body">
+          <textarea id="p-summary" class="form-control" rows="4" oninput="markDirty()"></textarea>
+        </div>
+      </div>
+
+      <!-- Skills -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Skills</div>
+        <div class="card-body">
+          <div class="tag-input-wrap" id="skills-wrap"></div>
+          <div class="form-text mt-1">Press Enter or comma to add a skill. Backspace removes the last one.</div>
+        </div>
+      </div>
+
+      <!-- Experience -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          Experience
+          <button class="btn btn-sm btn-outline-primary" onclick="addExperience()">+ Add Role</button>
+        </div>
+        <div class="card-body p-0">
+          <div class="accordion" id="exp-accordion"></div>
+        </div>
+      </div>
+
+      <!-- Education -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          Education
+          <button class="btn btn-sm btn-outline-primary" onclick="addEducation()">+ Add Entry</button>
+        </div>
+        <div class="card-body">
+          <div id="edu-list"></div>
+        </div>
+      </div>
+    </div><!-- /profile tab -->
+
+    <!-- ═══════════════════════════════════════════════════════ SOURCES TAB -->
+    <div class="tab-pane fade" id="tab-sources">
+      <p class="text-muted small mb-3">Toggle sources on/off. Disabled sources are skipped during the daily run. Your queries and URLs are always preserved.</p>
+      <div id="sources-list" class="row g-3"></div>
+      <div class="mt-3">
+        <button class="btn btn-outline-primary btn-sm" onclick="openAddSourceModal()">+ Add Source</button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ SEARCH TAB -->
+    <div class="tab-pane fade" id="tab-search">
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Search Settings</div>
+        <div class="card-body">
+          <div class="row g-4">
+            <div class="col-md-6">
+              <label class="form-label">Canadian Location <span class="text-muted small">(used by Job Bank Canada)</span></label>
+              <input id="s-location" class="form-control" oninput="markDirty()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Days Back <span class="text-muted small">(fetch jobs posted within)</span></label>
+              <input id="s-days-back" class="form-control" type="number" min="1" max="30" oninput="markDirty()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Jobs Per Run <span class="text-muted small">(max results to process)</span></label>
+              <input id="s-max-results" class="form-control" type="number" min="1" max="20" oninput="markDirty()">
+            </div>
+            <div class="col-12">
+              <label class="form-label">Exclude Keywords <span class="text-muted small">(skip jobs whose title/description contains these)</span></label>
+              <div class="tag-input-wrap" id="exclude-keywords-wrap"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ SCORING TAB -->
+    <div class="tab-pane fade" id="tab-scoring">
+      <div class="row g-4 mb-4">
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header fw-semibold">Tier 1 <span class="badge bg-success ms-1">Best Match</span></div>
+            <div class="card-body d-flex flex-column gap-3">
+              <div>
+                <label class="form-label">Must-have Keywords</label>
+                <div class="tag-input-wrap" id="tier1-kw-wrap"></div>
+              </div>
+              <div>
+                <label class="form-label">Min Keyword Matches Required</label>
+                <input id="tier1-threshold" class="form-control" type="number" min="1" max="10" oninput="markDirty()">
+              </div>
+              <div>
+                <label class="form-label">Bonus Keywords <span class="text-muted small">(don't count toward threshold, add score)</span></label>
+                <div class="tag-input-wrap" id="tier1-bonus-wrap"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-header fw-semibold">Tier 2 <span class="badge bg-info ms-1 text-dark">Secondary</span></div>
+            <div class="card-body d-flex flex-column gap-3">
+              <div>
+                <label class="form-label">Keywords</label>
+                <div class="tag-input-wrap" id="tier2-kw-wrap"></div>
+              </div>
+              <div>
+                <label class="form-label">Min Keyword Matches Required</label>
+                <input id="tier2-threshold" class="form-control" type="number" min="1" max="10" oninput="markDirty()">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header fw-semibold">Remote Bonus</div>
+        <div class="card-body">
+          <label class="form-label">Remote jobs get <strong id="remote-bonus-val">+0.5</strong> added to their score</label>
+          <input id="remote-bonus" type="range" class="form-range" min="0" max="2" step="0.1"
+            oninput="document.getElementById('remote-bonus-val').textContent = '+' + parseFloat(this.value).toFixed(1); markDirty()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ CLEANUP TAB -->
+    <div class="tab-pane fade" id="tab-cleanup">
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Folder Retention Policy</div>
+        <div class="card-body">
+          <div class="flow-diagram my-3">
+            <div class="flow-box">
+              <label>Trigger After</label>
+              <input id="cleanup-trigger" type="number" min="2" max="30" oninput="updateCleanupConstraint(); markDirty()">
+              <div class="small text-muted mt-1">folders</div>
+            </div>
+            <div class="flow-arrow">→ delete oldest →</div>
+            <div class="flow-box">
+              <label>Keep</label>
+              <input id="cleanup-keep" type="number" min="1" max="29" oninput="markDirty()">
+              <div class="small text-muted mt-1">folders</div>
+            </div>
+          </div>
+          <div class="alert alert-info mt-3 mb-0">
+            <strong>How it works:</strong> Cleanup only runs once <strong id="cleanup-trigger-label">7</strong> dated job folders
+            exist. When triggered, it keeps the <strong id="cleanup-keep-label">2</strong> most recent folders and permanently
+            deletes the rest.<br><br>
+            <strong>Never touched:</strong> <code>logs/</code>, <code>seen_jobs.json</code>, scripts, and config files.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════ SETUP TAB -->
+    <div class="tab-pane fade" id="tab-setup">
+      <div class="alert alert-info mb-4">
+        This tab shows the shell commands to install and manage the daily scheduler (launchd). Run these yourself in Terminal — the UI doesn't touch launchd.
+      </div>
+      <div id="setup-commands"></div>
+    </div>
+
+  </div><!-- /tab-content -->
+</div><!-- /container -->
+
+<!-- ══════════════════════════════════════════════════════ SETUP MODAL -->
+<div class="modal fade" id="setup-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Setup — Connect to config.json</h5>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">Point this UI at the <code>config.json</code> file used by your job search pipeline. The file stays on your machine — nothing is uploaded.</p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Path to config.json <span class="text-danger">*</span></label>
+          <input id="setup-config-path" class="form-control font-monospace" placeholder="/path/to/claude-jobs/config.json">
+          <div class="form-text">Absolute path. You may use <code>~</code> for your home directory.</div>
+        </div>
+        <div class="mb-1">
+          <label class="form-label fw-semibold">launchd Service Name <span class="text-muted small">(optional)</span></label>
+          <input id="setup-plist-name" class="form-control font-monospace" placeholder="com.jobsearch.plist">
+          <div class="form-text">Used in the Setup tab shell commands. Leave blank to use <code>com.jobsearch.plist</code>.</div>
+        </div>
+        <div id="setup-error" class="alert alert-danger mt-3 mb-0 d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="setup-cancel-btn" class="btn btn-secondary d-none" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════ ADD SOURCE MODAL -->
+<div class="modal fade" id="add-source-modal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Add Custom Source</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">Source ID <span class="text-muted small">(unique key, letters/numbers/underscores)</span></label>
+          <input id="new-src-name" class="form-control font-monospace" placeholder="e.g. my_rss_feed">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Type</label>
+          <select id="new-src-type" class="form-select" onchange="updateNewSourceFields()">
+            <option value="rss">RSS Feed</option>
+            <option value="api">JSON API</option>
+            <option value="search_rss">Search-based RSS</option>
+          </select>
+        </div>
+        <div id="new-src-url-group" class="mb-3">
+          <label class="form-label">Feed / API URL</label>
+          <input id="new-src-url" class="form-control" placeholder="https://...">
+        </div>
+        <div id="new-src-limit-group" class="mb-3" style="display:none">
+          <label class="form-label">Fetch Limit</label>
+          <input id="new-src-limit" class="form-control" type="number" min="1" max="500" value="100">
+        </div>
+        <div id="new-src-queries-group" class="mb-3" style="display:none">
+          <label class="form-label">Search Queries</label>
+          <div class="tag-input-wrap" id="new-src-queries-wrap"></div>
+          <div class="form-text">Press Enter or comma to add each query.</div>
+        </div>
+        <div id="add-source-error" class="alert alert-danger mt-2 mb-0 d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" onclick="addCustomSource()">Add Source</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal fade" id="confirm-modal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header"><h6 class="modal-title">Remove Entry</h6></div>
+      <div class="modal-body" id="confirm-modal-body">Are you sure?</div>
+      <div class="modal-footer">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-danger" id="confirm-modal-ok">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container">
+  <div id="app-toast" class="toast align-items-center border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="toast-msg"></div>
+      <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+let rawConfig = null;   // original from server (preserves _comment keys)
+let appMeta   = null;
+let isDirty   = false;
+
+function markDirty() {
+  isDirty = true;
+  document.getElementById('dirty-banner').classList.add('show');
+  document.body.classList.add('has-dirty');
+}
+function markClean() {
+  isDirty = false;
+  document.getElementById('dirty-banner').classList.remove('show');
+  document.body.classList.remove('has-dirty');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAG INPUT WIDGET
+// ═══════════════════════════════════════════════════════════════════════════════
+class TagInput {
+  constructor(wrapperId) {
+    this.wrap = document.getElementById(wrapperId);
+    this.input = document.createElement('input');
+    this.input.className = 'tag-text-input';
+    this.input.placeholder = 'Add, press Enter';
+    this.wrap.appendChild(this.input);
+    this.wrap.addEventListener('click', () => this.input.focus());
+    this.input.addEventListener('keydown', e => this._onKey(e));
+    this.input.addEventListener('blur', () => this._commitInput());
+  }
+
+  _onKey(e) {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      this._commitInput();
+    } else if (e.key === 'Backspace' && this.input.value === '') {
+      const badges = this.wrap.querySelectorAll('.tag-badge');
+      if (badges.length) { badges[badges.length - 1].remove(); markDirty(); }
+    }
+  }
+
+  _commitInput() {
+    const val = this.input.value.replace(/,/g, '').trim();
+    if (val) { this._addTag(val); this.input.value = ''; markDirty(); }
+  }
+
+  _addTag(text) {
+    const badge = document.createElement('span');
+    badge.className = 'tag-badge';
+    badge.innerHTML = `${this._esc(text)} <button type="button" title="Remove">×</button>`;
+    badge.querySelector('button').addEventListener('click', () => { badge.remove(); markDirty(); });
+    this.wrap.insertBefore(badge, this.input);
+  }
+
+  _esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  setValues(arr) {
+    this.wrap.querySelectorAll('.tag-badge').forEach(b => b.remove());
+    (arr || []).forEach(v => this._addTag(v));
+  }
+
+  getValues() {
+    return [...this.wrap.querySelectorAll('.tag-badge')].map(b =>
+      b.childNodes[0].textContent.trim()
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAG INPUT INSTANCES
+// ═══════════════════════════════════════════════════════════════════════════════
+const tags = {};
+let newSourceQueryTags = null;
+
+function initTagInputs() {
+  tags.skills           = new TagInput('skills-wrap');
+  tags.excludeKeywords  = new TagInput('exclude-keywords-wrap');
+  tags.tier1Kw          = new TagInput('tier1-kw-wrap');
+  tags.tier1Bonus       = new TagInput('tier1-bonus-wrap');
+  tags.tier2Kw          = new TagInput('tier2-kw-wrap');
+  newSourceQueryTags    = new TagInput('new-src-queries-wrap');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SOURCE METADATA (built-in sources)
+// ═══════════════════════════════════════════════════════════════════════════════
+const SOURCE_META = {
+  jobbank:             { label: 'Job Bank Canada', type: 'RSS', kind: 'queries' },
+  remotive:            { label: 'Remotive',        type: 'JSON API', kind: 'limit' },
+  weworkremotely:      { label: 'We Work Remotely',type: 'RSS', kind: 'feeds' },
+  remoteok:            { label: 'RemoteOK',        type: 'RSS', kind: 'url' },
+  himalayas:           { label: 'Himalayas',       type: 'JSON API', kind: 'queries+limit' },
+  realworkfromanywhere:{ label: 'Real Work From Anywhere', type: 'RSS', kind: 'feeds' },
+  jobicy:              { label: 'Jobicy',           type: 'RSS', kind: 'url' },
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POPULATE UI
+// ═══════════════════════════════════════════════════════════════════════════════
+function populateAll(cfg) {
+  populateProfile(cfg.candidate);
+  populateSources(cfg.sources, cfg.disabled_sources || []);
+  populateSearch(cfg.search);
+  populateScoring(cfg.scoring);
+  populateCleanup(cfg.cleanup);
+}
+
+function populateProfile(c) {
+  document.getElementById('p-name').value     = c.name     || '';
+  document.getElementById('p-title').value    = c.title    || '';
+  document.getElementById('p-email').value    = c.email    || '';
+  document.getElementById('p-phone').value    = c.phone    || '';
+  document.getElementById('p-location').value = c.location || '';
+  document.getElementById('p-linkedin').value = c.linkedin || '';
+  document.getElementById('p-github').value   = c.github   || '';
+  document.getElementById('p-summary').value  = c.summary  || '';
+  tags.skills.setValues(c.skills || []);
+  renderExperience(c.experience || []);
+  renderEducation(c.education   || []);
+}
+
+// ── Experience ──────────────────────────────────────────────────────────────
+function renderExperience(expArr) {
+  const acc = document.getElementById('exp-accordion');
+  acc.innerHTML = '';
+  expArr.forEach((exp, i) => acc.appendChild(buildExpCard(exp, i)));
+}
+
+function buildExpCard(exp, i) {
+  const id = `exp-${i}`;
+  const div = document.createElement('div');
+  div.className = 'accordion-item';
+  div.dataset.expIndex = i;
+  div.innerHTML = `
+    <h2 class="accordion-header">
+      <button class="accordion-button ${i > 0 ? 'collapsed' : ''}" type="button"
+        data-bs-toggle="collapse" data-bs-target="#${id}-body">
+        <span class="exp-header-label">${esc(exp.title || 'New Role')} @ ${esc(exp.company || '?')}</span>
+      </button>
+    </h2>
+    <div id="${id}-body" class="accordion-collapse collapse ${i === 0 ? 'show' : ''}">
+      <div class="accordion-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-4"><label class="form-label small">Title</label>
+            <input class="form-control form-control-sm exp-title" value="${esc(exp.title||'')}" oninput="updateExpHeader(this); markDirty()"></div>
+          <div class="col-md-4"><label class="form-label small">Company</label>
+            <input class="form-control form-control-sm exp-company" value="${esc(exp.company||'')}" oninput="updateExpHeader(this); markDirty()"></div>
+          <div class="col-md-2"><label class="form-label small">Dates</label>
+            <input class="form-control form-control-sm exp-dates" value="${esc(exp.dates||'')}" oninput="markDirty()"></div>
+          <div class="col-md-2"><label class="form-label small">Location</label>
+            <input class="form-control form-control-sm exp-location" value="${esc(exp.location||'')}" oninput="markDirty()"></div>
+        </div>
+        <label class="form-label small fw-semibold">Bullets</label>
+        <div class="bullets-list mb-2">${(exp.bullets||[]).map(b => bulletRowHTML(b)).join('')}</div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="addBullet(this)">+ Add Bullet</button>
+          <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeExpCard(this)">Remove Role</button>
+        </div>
+      </div>
+    </div>`;
+  initBulletDrag(div.querySelector('.bullets-list'));
+  return div;
+}
+
+function bulletRowHTML(text) {
+  return `<div class="bullet-row" draggable="true">
+    <span class="drag-handle">⠿</span>
+    <input class="form-control form-control-sm" value="${esc(text)}" oninput="markDirty()">
+    <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.bullet-row').remove(); markDirty()">×</button>
+  </div>`;
+}
+
+function addBullet(btn) {
+  const list = btn.closest('.accordion-body').querySelector('.bullets-list');
+  const row = document.createElement('div');
+  row.outerHTML; // dummy
+  list.insertAdjacentHTML('beforeend', bulletRowHTML(''));
+  const newRow = list.lastElementChild;
+  initBulletDrag(list);
+  newRow.querySelector('input').focus();
+  markDirty();
+}
+
+function updateExpHeader(input) {
+  const card = input.closest('.accordion-item');
+  const title   = card.querySelector('.exp-title').value;
+  const company = card.querySelector('.exp-company').value;
+  card.querySelector('.exp-header-label').textContent = `${title || 'Role'} @ ${company || '?'}`;
+}
+
+function addExperience() {
+  const acc = document.getElementById('exp-accordion');
+  const i = acc.children.length;
+  const card = buildExpCard({ title:'', company:'', dates:'', location:'', bullets:[] }, i);
+  acc.appendChild(card);
+  acc.querySelectorAll('.accordion-collapse.show').forEach(el => {
+    bootstrap.Collapse.getOrCreateInstance(el).hide();
+  });
+  const newBody = card.querySelector('.accordion-collapse');
+  bootstrap.Collapse.getOrCreateInstance(newBody).show();
+  markDirty();
+}
+
+function removeExpCard(btn) {
+  const card = btn.closest('.accordion-item');
+  const label = card.querySelector('.exp-header-label').textContent;
+  confirmRemove(`Remove "${label}"?`, () => { card.remove(); markDirty(); });
+}
+
+function initBulletDrag(list) {
+  let dragging = null;
+  list.querySelectorAll('.bullet-row').forEach(row => {
+    row.addEventListener('dragstart', e => { dragging = row; e.dataTransfer.effectAllowed = 'move'; });
+    row.addEventListener('dragend',   () => { dragging = null; list.querySelectorAll('.bullet-row').forEach(r => r.classList.remove('drag-over')); });
+    row.addEventListener('dragover',  e => { e.preventDefault(); if (dragging && dragging !== row) row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop',      e => { e.preventDefault(); row.classList.remove('drag-over'); if (dragging && dragging !== row) { list.insertBefore(dragging, row); markDirty(); } });
+  });
+}
+
+// ── Education ────────────────────────────────────────────────────────────────
+function renderEducation(eduArr) {
+  const list = document.getElementById('edu-list');
+  list.innerHTML = '';
+  eduArr.forEach((edu, i) => list.appendChild(buildEduCard(edu, i)));
+}
+
+function buildEduCard(edu, i) {
+  const div = document.createElement('div');
+  div.className = 'card mb-2 edu-card';
+  div.innerHTML = `
+    <div class="card-body">
+      <div class="row g-2 align-items-end">
+        <div class="col-md-5"><label class="form-label small">Degree / Certificate</label>
+          <input class="form-control form-control-sm edu-degree" value="${esc(edu.degree||'')}" oninput="markDirty()"></div>
+        <div class="col-md-4"><label class="form-label small">School</label>
+          <input class="form-control form-control-sm edu-school" value="${esc(edu.school||'')}" oninput="markDirty()"></div>
+        <div class="col-md-2"><label class="form-label small">Dates</label>
+          <input class="form-control form-control-sm edu-dates" value="${esc(edu.dates||'')}" oninput="markDirty()"></div>
+        <div class="col-md-1 d-flex align-items-end">
+          <button class="btn btn-sm btn-outline-danger w-100" onclick="removeEduCard(this)">×</button>
+        </div>
+      </div>
+    </div>`;
+  return div;
+}
+
+function addEducation() {
+  const list = document.getElementById('edu-list');
+  list.appendChild(buildEduCard({ degree:'', school:'', dates:'' }, list.children.length));
+  markDirty();
+}
+
+function removeEduCard(btn) {
+  const card = btn.closest('.edu-card');
+  const degree = card.querySelector('.edu-degree').value || 'this entry';
+  confirmRemove(`Remove "${degree}"?`, () => { card.remove(); markDirty(); });
+}
+
+// ── Sources ──────────────────────────────────────────────────────────────────
+function populateSources(sources, disabledList) {
+  const container = document.getElementById('sources-list');
+  container.innerHTML = '';
+  const disabled = new Set(disabledList);
+
+  // Built-in sources
+  Object.entries(SOURCE_META).forEach(([key, meta]) => {
+    const src = sources[key] || {};
+    const isDisabled = disabled.has(key);
+    const typeColor = meta.type === 'RSS' ? 'primary' : 'success';
+    const toggleId = `src-toggle-${key}`;
+    const cardId = `src-card-${key}`;
+
+    const col = document.createElement('div');
+    col.className = 'col-12';
+    col.innerHTML = `
+      <div class="card source-card ${isDisabled ? 'disabled-source' : ''}" id="${cardId}" data-source="${key}">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <strong>${esc(meta.label)}</strong>
+            <span class="badge bg-${typeColor}">${meta.type}</span>
+          </div>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="${toggleId}"
+              ${isDisabled ? '' : 'checked'}
+              onchange="toggleSource('${key}', this.checked)">
+            <label class="form-check-label small" for="${toggleId}">${isDisabled ? 'Disabled' : 'Enabled'}</label>
+          </div>
+        </div>
+        <div class="card-body">
+          ${buildSourceBody(key, meta.kind, src)}
+        </div>
+      </div>`;
+    container.appendChild(col);
+
+    if (meta.kind === 'queries' || meta.kind === 'queries+limit') {
+      tags[`src_${key}_queries`] = new TagInput(`src-${key}-queries-wrap`);
+      tags[`src_${key}_queries`].setValues(src.queries || []);
+    }
+  });
+
+  // Custom sources
+  Object.entries(sources).forEach(([key, src]) => {
+    if (!src || !src.custom) return;
+    container.appendChild(buildCustomSourceCard(key, src, disabled));
+  });
+}
+
+function buildCustomSourceCard(key, src, disabled) {
+  const isDisabled = disabled.has(key);
+  const toggleId = `src-toggle-${key}`;
+  const cardId = `src-card-${key}`;
+
+  const typeMap   = { rss: 'RSS', api: 'JSON API', search_rss: 'Search RSS' };
+  const colorMap  = { rss: 'primary', api: 'success', search_rss: 'primary' };
+  const typeLabel = typeMap[src.type] || src.type || 'Custom';
+  const typeColor = colorMap[src.type] || 'secondary';
+
+  let bodyHtml = '';
+  if (src.url)   bodyHtml += `<div class="text-muted small mb-1"><span class="fw-semibold">URL:</span> ${esc(src.url)}</div>`;
+  if (Array.isArray(src.queries) && src.queries.length)
+    bodyHtml += `<div class="text-muted small mb-1"><span class="fw-semibold">Queries:</span> ${src.queries.map(esc).join(', ')}</div>`;
+  if (src.limit != null)
+    bodyHtml += `<div class="text-muted small"><span class="fw-semibold">Limit:</span> ${esc(String(src.limit))}</div>`;
+  if (!bodyHtml) bodyHtml = '<span class="text-muted small">No details configured.</span>';
+
+  const col = document.createElement('div');
+  col.className = 'col-12';
+  col.id = `src-col-${key}`;
+  col.innerHTML = `
+    <div class="card source-card ${isDisabled ? 'disabled-source' : ''}" id="${cardId}" data-source="${key}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-2">
+          <strong>${esc(key)}</strong>
+          <span class="badge bg-${typeColor}">${typeLabel}</span>
+          <span class="badge bg-secondary">Custom</span>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="${toggleId}"
+              ${isDisabled ? '' : 'checked'}
+              onchange="toggleSource('${key}', this.checked)">
+            <label class="form-check-label small" for="${toggleId}">${isDisabled ? 'Disabled' : 'Enabled'}</label>
+          </div>
+          <button class="btn btn-sm btn-outline-danger" title="Delete source" onclick="deleteCustomSource('${key}')">&#128465;</button>
+        </div>
+      </div>
+      <div class="card-body">${bodyHtml}</div>
+    </div>`;
+  return col;
+}
+
+function buildSourceBody(key, kind, src) {
+  if (kind === 'limit') {
+    return `<div class="row"><div class="col-md-3">
+      <label class="form-label small">Fetch Limit</label>
+      <input id="src-${key}-limit" class="form-control form-control-sm" type="number" min="1" max="500"
+        value="${src.limit || 100}" oninput="markDirty()">
+    </div></div>`;
+  }
+  if (kind === 'url') {
+    return `<label class="form-label small">Feed URL</label>
+      <input id="src-${key}-url" class="form-control form-control-sm" value="${esc(src.url||'')}" oninput="markDirty()">`;
+  }
+  if (kind === 'feeds') {
+    const feedsHTML = (src.feeds || []).map((f, i) => feedRowHTML(key, f, i)).join('');
+    return `<label class="form-label small">Feed URLs</label>
+      <div id="src-${key}-feeds">${feedsHTML}</div>
+      <button class="btn btn-sm btn-outline-secondary mt-2" onclick="addFeed('${key}')">+ Add Feed</button>`;
+  }
+  if (kind === 'queries') {
+    return `<label class="form-label small">Search Queries</label>
+      <div class="tag-input-wrap" id="src-${key}-queries-wrap"></div>`;
+  }
+  if (kind === 'queries+limit') {
+    return `<div class="row g-3">
+      <div class="col-md-9">
+        <label class="form-label small">Search Queries</label>
+        <div class="tag-input-wrap" id="src-${key}-queries-wrap"></div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small">Fetch Limit</label>
+        <input id="src-${key}-limit" class="form-control form-control-sm" type="number" min="1" max="200"
+          value="${src.limit || 20}" oninput="markDirty()">
+      </div>
+    </div>`;
+  }
+  return '';
+}
+
+function feedRowHTML(key, url, i) {
+  return `<div class="d-flex gap-2 mb-2 feed-row" data-feed-index="${i}">
+    <input class="form-control form-control-sm" value="${esc(url)}" oninput="markDirty()">
+    <button class="btn btn-sm btn-outline-danger" onclick="removeFeed(this)">×</button>
+  </div>`;
+}
+
+function addFeed(key) {
+  const container = document.getElementById(`src-${key}-feeds`);
+  const i = container.children.length;
+  container.insertAdjacentHTML('beforeend', feedRowHTML(key, '', i));
+  markDirty();
+}
+
+function removeFeed(btn) {
+  btn.closest('.feed-row').remove();
+  markDirty();
+}
+
+function toggleSource(key, enabled) {
+  const card = document.getElementById(`src-card-${key}`);
+  const label = document.querySelector(`#src-toggle-${key} + label`);
+  if (enabled) {
+    card.classList.remove('disabled-source');
+    label.textContent = 'Enabled';
+  } else {
+    card.classList.add('disabled-source');
+    label.textContent = 'Disabled';
+  }
+  markDirty();
+}
+
+// ── Add / delete custom sources ───────────────────────────────────────────────
+function openAddSourceModal() {
+  document.getElementById('new-src-name').value = '';
+  document.getElementById('new-src-type').value = 'rss';
+  document.getElementById('new-src-url').value  = '';
+  document.getElementById('new-src-limit').value = '100';
+  newSourceQueryTags.setValues([]);
+  document.getElementById('add-source-error').classList.add('d-none');
+  updateNewSourceFields();
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('add-source-modal')).show();
+}
+
+function updateNewSourceFields() {
+  const type = document.getElementById('new-src-type').value;
+  document.getElementById('new-src-url-group').style.display     = (type === 'rss' || type === 'api') ? '' : 'none';
+  document.getElementById('new-src-limit-group').style.display   = (type === 'api') ? '' : 'none';
+  document.getElementById('new-src-queries-group').style.display = (type === 'search_rss') ? '' : 'none';
+}
+
+function addCustomSource() {
+  const errEl = document.getElementById('add-source-error');
+  errEl.classList.add('d-none');
+
+  const rawName = document.getElementById('new-src-name').value.trim();
+  const key = rawName.replace(/[^a-z0-9_]/gi, '_').toLowerCase();
+  if (!key) {
+    errEl.textContent = 'Source ID is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  if (rawConfig.sources && rawConfig.sources[key]) {
+    errEl.textContent = `A source with ID "${key}" already exists.`;
+    errEl.classList.remove('d-none');
+    return;
+  }
+
+  const type   = document.getElementById('new-src-type').value;
+  const newSrc = { custom: true, type };
+
+  if (type === 'rss') {
+    newSrc.url = document.getElementById('new-src-url').value.trim();
+    if (!newSrc.url) { errEl.textContent = 'Feed URL is required.'; errEl.classList.remove('d-none'); return; }
+  } else if (type === 'api') {
+    newSrc.url   = document.getElementById('new-src-url').value.trim();
+    newSrc.limit = parseInt(document.getElementById('new-src-limit').value) || 100;
+    if (!newSrc.url) { errEl.textContent = 'API URL is required.'; errEl.classList.remove('d-none'); return; }
+  } else if (type === 'search_rss') {
+    newSrc.queries = newSourceQueryTags.getValues();
+    if (!newSrc.queries.length) { errEl.textContent = 'Add at least one search query.'; errEl.classList.remove('d-none'); return; }
+  }
+
+  if (!rawConfig.sources) rawConfig.sources = {};
+  rawConfig.sources[key] = newSrc;
+
+  bootstrap.Modal.getInstance(document.getElementById('add-source-modal')).hide();
+  populateSources(rawConfig.sources, rawConfig.disabled_sources || []);
+  markDirty();
+}
+
+function deleteCustomSource(key) {
+  confirmRemove(`Remove custom source "${key}"?`, () => {
+    if (rawConfig.sources) delete rawConfig.sources[key];
+    const col = document.getElementById(`src-col-${key}`);
+    if (col) col.remove();
+    markDirty();
+  });
+}
+
+// ── Search ───────────────────────────────────────────────────────────────────
+function populateSearch(s) {
+  document.getElementById('s-location').value    = s.canada_location     || '';
+  document.getElementById('s-days-back').value   = s.days_back           || 1;
+  document.getElementById('s-max-results').value = s.max_results_per_tier|| 5;
+  tags.excludeKeywords.setValues(s.exclude_keywords || []);
+}
+
+// ── Scoring ──────────────────────────────────────────────────────────────────
+function populateScoring(sc) {
+  tags.tier1Kw.setValues(sc.tier1_keywords       || []);
+  tags.tier1Bonus.setValues(sc.tier1_bonus_keywords || []);
+  tags.tier2Kw.setValues(sc.tier2_keywords       || []);
+  document.getElementById('tier1-threshold').value = sc.tier1_threshold || 2;
+  document.getElementById('tier2-threshold').value = sc.tier2_threshold || 2;
+  const rb = sc.remote_bonus != null ? sc.remote_bonus : 0.5;
+  document.getElementById('remote-bonus').value = rb;
+  document.getElementById('remote-bonus-val').textContent = '+' + rb.toFixed(1);
+}
+
+// ── Cleanup ──────────────────────────────────────────────────────────────────
+function populateCleanup(cl) {
+  document.getElementById('cleanup-trigger').value = cl.trigger_after_days || 7;
+  document.getElementById('cleanup-keep').value    = cl.keep_days           || 2;
+  updateCleanupLabels();
+}
+
+function updateCleanupConstraint() {
+  const trigger = parseInt(document.getElementById('cleanup-trigger').value) || 7;
+  const keepEl  = document.getElementById('cleanup-keep');
+  keepEl.max = Math.max(1, trigger - 1);
+  if (parseInt(keepEl.value) >= trigger) keepEl.value = trigger - 1;
+  updateCleanupLabels();
+}
+
+function updateCleanupLabels() {
+  document.getElementById('cleanup-trigger-label').textContent = document.getElementById('cleanup-trigger').value;
+  document.getElementById('cleanup-keep-label').textContent    = document.getElementById('cleanup-keep').value;
+}
+
+// ── Setup tab ────────────────────────────────────────────────────────────────
+function populateSetup(meta) {
+  const pipelineDir  = meta.pipeline_dir;
+  const plistPath    = meta.plist_path;
+  const launchAgents = meta.launch_agents_dir;
+  const plistName    = meta.plist_name;
+  const plistDest    = `"${launchAgents}/${plistName}"`;
+  const serviceId    = plistName.replace('.plist', '');
+
+  const commands = [
+    {
+      title: '1. Check if scheduler is installed',
+      code: `launchctl list | grep ${serviceId}`,
+    },
+    {
+      title: '2. Install the daily scheduler (runs at 08:00 every day)',
+      code: `cp "${plistPath}" "${launchAgents}/"\nlaunchctl load "${launchAgents}/${plistName}"`,
+    },
+    {
+      title: '3. Run the job search manually right now',
+      code: `cd "${pipelineDir}" && python3 job_search_daily.py`,
+    },
+    {
+      title: '4. Dry run (preview only — no files created)',
+      code: `cd "${pipelineDir}" && python3 job_search_daily.py --dry-run`,
+    },
+    {
+      title: "5. View today's log",
+      code: `cat "${pipelineDir}/logs/$(date +%Y-%m-%d).log"`,
+    },
+    {
+      title: '6. Uninstall the scheduler',
+      code: `launchctl unload ${plistDest}\nrm ${plistDest}`,
+    },
+  ];
+
+  const container = document.getElementById('setup-commands');
+  container.innerHTML = commands.map(cmd => `
+    <div class="mb-4">
+      <div class="fw-semibold mb-1">${esc(cmd.title)}</div>
+      <div class="code-block-wrap">
+        <pre>${esc(cmd.code)}</pre>
+        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+      </div>
+    </div>`).join('');
+}
+
+function copyCode(btn) {
+  const code = btn.previousElementSibling.textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SETUP MODAL
+// ═══════════════════════════════════════════════════════════════════════════════
+function openSetupModal() {
+  fetch('/api/settings')
+    .then(r => r.json())
+    .then(s => {
+      document.getElementById('setup-config-path').value = s.config_path || '';
+      document.getElementById('setup-plist-name').value  = s.plist_name  || 'com.jobsearch.plist';
+      document.getElementById('setup-error').classList.add('d-none');
+      // Show Cancel only if already configured (so user can dismiss)
+      document.getElementById('setup-cancel-btn').classList.toggle('d-none', !s.config_path);
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('setup-modal')).show();
+    });
+}
+
+async function saveSetup() {
+  const errEl      = document.getElementById('setup-error');
+  errEl.classList.add('d-none');
+  const configPath = document.getElementById('setup-config-path').value.trim();
+  const plistName  = document.getElementById('setup-plist-name').value.trim() || 'com.jobsearch.plist';
+  if (!configPath) {
+    errEl.textContent = 'Config path is required.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  try {
+    const res  = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config_path: configPath, plist_name: plistName }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      location.reload();
+    } else {
+      errEl.textContent = data.error || 'Failed to save settings.';
+      errEl.classList.remove('d-none');
+    }
+  } catch (err) {
+    errEl.textContent = err.message;
+    errEl.classList.remove('d-none');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COLLECT (UI → data)
+// ═══════════════════════════════════════════════════════════════════════════════
+function collectAll() {
+  // Deep clone raw to preserve _comment keys and custom source data
+  const out = JSON.parse(JSON.stringify(rawConfig));
+
+  // Candidate
+  out.candidate.name     = document.getElementById('p-name').value;
+  out.candidate.title    = document.getElementById('p-title').value;
+  out.candidate.email    = document.getElementById('p-email').value;
+  out.candidate.phone    = document.getElementById('p-phone').value;
+  out.candidate.location = document.getElementById('p-location').value;
+  out.candidate.linkedin = document.getElementById('p-linkedin').value;
+  out.candidate.github   = document.getElementById('p-github').value;
+  out.candidate.summary  = document.getElementById('p-summary').value;
+  out.candidate.skills   = tags.skills.getValues();
+  out.candidate.experience = collectExperience();
+  out.candidate.education  = collectEducation();
+
+  // Sources
+  const disabledSources = [];
+
+  // Built-in sources
+  Object.keys(SOURCE_META).forEach(key => {
+    const toggle = document.getElementById(`src-toggle-${key}`);
+    if (toggle && !toggle.checked) disabledSources.push(key);
+
+    const meta = SOURCE_META[key];
+    const src  = out.sources[key] || {};
+
+    if (meta.kind === 'url') {
+      const el = document.getElementById(`src-${key}-url`);
+      if (el) src.url = el.value;
+    }
+    if (meta.kind === 'limit') {
+      const el = document.getElementById(`src-${key}-limit`);
+      if (el) src.limit = parseInt(el.value) || src.limit;
+    }
+    if (meta.kind === 'feeds') {
+      const container = document.getElementById(`src-${key}-feeds`);
+      if (container) src.feeds = [...container.querySelectorAll('.feed-row input')].map(i => i.value);
+    }
+    if (meta.kind === 'queries') {
+      if (tags[`src_${key}_queries`]) src.queries = tags[`src_${key}_queries`].getValues();
+    }
+    if (meta.kind === 'queries+limit') {
+      if (tags[`src_${key}_queries`]) src.queries = tags[`src_${key}_queries`].getValues();
+      const el = document.getElementById(`src-${key}-limit`);
+      if (el) src.limit = parseInt(el.value) || src.limit;
+    }
+    out.sources[key] = src;
+  });
+
+  // Custom sources — data already preserved via rawConfig clone; just capture disabled toggle
+  Object.keys(out.sources).forEach(key => {
+    if (out.sources[key] && out.sources[key].custom) {
+      const toggle = document.getElementById(`src-toggle-${key}`);
+      if (toggle && !toggle.checked) disabledSources.push(key);
+    }
+  });
+
+  out.disabled_sources = disabledSources;
+
+  // Search
+  out.search.canada_location      = document.getElementById('s-location').value;
+  out.search.days_back            = parseInt(document.getElementById('s-days-back').value) || 1;
+  out.search.max_results_per_tier = parseInt(document.getElementById('s-max-results').value) || 5;
+  out.search.exclude_keywords     = tags.excludeKeywords.getValues();
+
+  // Scoring
+  out.scoring.tier1_keywords       = tags.tier1Kw.getValues();
+  out.scoring.tier1_bonus_keywords = tags.tier1Bonus.getValues();
+  out.scoring.tier2_keywords       = tags.tier2Kw.getValues();
+  out.scoring.tier1_threshold      = parseInt(document.getElementById('tier1-threshold').value) || 2;
+  out.scoring.tier2_threshold      = parseInt(document.getElementById('tier2-threshold').value) || 2;
+  out.scoring.remote_bonus         = parseFloat(document.getElementById('remote-bonus').value) || 0.5;
+
+  // Cleanup
+  out.cleanup.trigger_after_days = parseInt(document.getElementById('cleanup-trigger').value) || 7;
+  out.cleanup.keep_days          = parseInt(document.getElementById('cleanup-keep').value) || 2;
+
+  return out;
+}
+
+function collectExperience() {
+  return [...document.querySelectorAll('#exp-accordion .accordion-item')].map(card => ({
+    title:    card.querySelector('.exp-title').value,
+    company:  card.querySelector('.exp-company').value,
+    dates:    card.querySelector('.exp-dates').value,
+    location: card.querySelector('.exp-location').value,
+    bullets:  [...card.querySelectorAll('.bullets-list .bullet-row input')].map(i => i.value).filter(Boolean),
+  }));
+}
+
+function collectEducation() {
+  return [...document.querySelectorAll('#edu-list .edu-card')].map(card => ({
+    degree: card.querySelector('.edu-degree').value,
+    school: card.querySelector('.edu-school').value,
+    dates:  card.querySelector('.edu-dates').value,
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAVE
+// ═══════════════════════════════════════════════════════════════════════════════
+async function saveConfig() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const payload = collectAll();
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      rawConfig = payload;
+      markClean();
+      showToast('Changes saved successfully.', 'success');
+    } else {
+      showToast('Save failed: ' + (data.error || 'Unknown error'), 'danger');
+    }
+  } catch (err) {
+    showToast('Save failed: ' + err.message, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save All Changes';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg, type) {
+  const toast = document.getElementById('app-toast');
+  toast.className = `toast align-items-center text-bg-${type} border-0`;
+  document.getElementById('toast-msg').textContent = msg;
+  bootstrap.Toast.getOrCreateInstance(toast, { delay: 3500 }).show();
+}
+
+let _confirmCallback = null;
+function confirmRemove(message, callback) {
+  document.getElementById('confirm-modal-body').textContent = message;
+  _confirmCallback = callback;
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('confirm-modal')).show();
+}
+document.getElementById('confirm-modal-ok').addEventListener('click', () => {
+  bootstrap.Modal.getInstance(document.getElementById('confirm-modal')).hide();
+  if (_confirmCallback) { _confirmCallback(); _confirmCallback = null; }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+async function init() {
+  initTagInputs();
+
+  try {
+    const res  = await fetch('/api/config');
+    const data = await res.json();
+
+    // First-run: no config path configured yet
+    if (data.setup_required) {
+      openSetupModal();
+      return;
+    }
+
+    if (!res.ok) {
+      document.querySelector('.container-lg').innerHTML = `
+        <div class="alert alert-danger mt-4">
+          <h5>Cannot load configuration</h5>
+          <p>${esc(data.error || 'Server error ' + res.status)}</p>
+          <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Retry</button>
+          <button class="btn btn-sm btn-outline-secondary ms-2" onclick="openSetupModal()">Change Path</button>
+        </div>`;
+      return;
+    }
+
+    rawConfig  = data.config;
+    appMeta    = data.meta;
+    populateAll(rawConfig);
+    populateSetup(appMeta);
+  } catch (err) {
+    document.querySelector('.container-lg').innerHTML = `
+      <div class="alert alert-danger mt-4">
+        <h5>Failed to connect to the config server</h5>
+        <p>${esc(err.message)}</p>
+      </div>`;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+// Warn on unload if dirty
+window.addEventListener('beforeunload', e => {
+  if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+});
+
+// Sync cleanup labels on input
+document.getElementById('cleanup-trigger').addEventListener('input', updateCleanupLabels);
+document.getElementById('cleanup-keep').addEventListener('input', updateCleanupLabels);
+</script>
+</body>
+</html>

@@ -1,0 +1,76 @@
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+*.so
+*.dylib
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# Secrets & credentials
+*.key
+*.pem
+*.cert
+*.crt
+secrets.json
+credentials.json
+.anthropic_api_key
+
+# Pytest / test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+
+# Flask / runtime
+instance/
+
+# Logs (local run artefacts — not part of the repo)
+*.log
+
+# Temp / backup files written by the app itself
+config.json.bak
+config.json.tmp
+
+# Local settings (contains your config path — never commit this)
+settings.json
