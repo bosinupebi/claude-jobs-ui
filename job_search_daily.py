@@ -16,7 +16,7 @@ Each run:
        - Real Work From Anywhere (full-stack + backend remote RSS)
        - Jobicy RSS              (dev jobs, remote/hybrid/onsite)
   2. Deduplicates across all sources by URL
-  3. Scores every job against Bo's Tier 1 keyword profile (remote = +0.5 bonus)
+  3. Scores every job against the candidate's Tier 1 keyword profile (remote = +0.5 bonus)
   4. Validates each candidate URL is live (HTTP HEAD — no dead links)
   5. Picks the top 5 highest-scoring jobs across all sources
   6. Skips jobs already seen in previous runs (deduplication via seen_jobs.json)
@@ -522,7 +522,7 @@ TITLE_PASS_KEYWORDS = [
 
 
 def title_qualifies(title: str) -> bool:
-    """Quick check: does the job title suggest it's relevant to Bo's profile?"""
+    """Quick check: does the job title suggest it's relevant to the candidate's profile?"""
     t = title.lower()
     return any(kw in t for kw in TITLE_PASS_KEYWORDS)
 
@@ -584,7 +584,7 @@ def fetch_full_description(url: str, timeout: int = 10) -> str:
 
 def score_job(job: dict, config: dict) -> tuple[int, float]:
     """
-    Score a job against Bo's keyword profile using title + full description.
+    Score a job against the candidate's keyword profile using title + full description.
 
     Returns:
       (tier, score) where tier is 1, 2, or 3 and score is the float keyword count.
@@ -814,7 +814,7 @@ def generate_text(prompt: str, config: dict, logger: logging.Logger) -> str | No
 # ─── PROMPT BUILDERS ──────────────────────────────────────────────────────────
 
 def build_profile_block(config: dict) -> str:
-    """Render Bo's full profile as a text block for use in prompts."""
+    """Render the candidate's full profile as a text block for use in prompts."""
     c = config["candidate"]
     exp_text = ""
     for role in c["experience"]:
@@ -981,7 +981,7 @@ def write_readme(folder: Path, job: dict, tier: int, score: float) -> None:
 
 
 def _name_slug(name: str) -> str:
-    """Convert a candidate name to a filename-safe slug, e.g. 'Bo Osinupebi' → 'bo-osinupebi'."""
+    """Convert a candidate name to a filename-safe slug, e.g. 'Jane Smith' → 'jane-smith'."""
     return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
 
 
