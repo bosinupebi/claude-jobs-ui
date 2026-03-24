@@ -890,7 +890,7 @@ def build_resume_prompt(job: dict, config: dict) -> str:
     profile = build_profile_block(config)
     c = config["candidate"]
     return f"""
-You are writing a tailored one-page resume for {c['name']}, a Full-Stack Software Developer in Toronto.
+You are writing an ATS-optimised one-page resume for {c['name']}, a Full-Stack Software Developer in Toronto.
 
 JOB DETAILS
 -----------
@@ -910,15 +910,19 @@ Write a one-page resume in markdown. Start with EXACTLY this front matter block 
 
 Then the resume content in this order:
 1. Name (H1) + title line + contact on one line
-2. ## Summary: 2-3 sentences. Lead with the job's core stack requirements. Be specific to this job.
-3. ## Skills: Compress to 3 lines. Put the most relevant skills for THIS job first.
-4. ## Experience: 3 roles. Limit to 5-6 bullets max per role. Bold all metrics.
+2. ## Summary: 2-3 sentences. Mirror the exact job title and 2-3 key stack terms from the job description verbatim.
+3. ## Skills: Compress to 3 lines. List every skill mentioned in the job description that the candidate has, using the exact spelling/casing from the job description (e.g. if the JD says "Node.js" use "Node.js", not "NodeJS").
+4. ## Experience: 3 roles. 5-6 bullets max per role. Start each bullet with a strong action verb. Bold all metrics.
 5. ## Education: 2 lines only.
 
-Rules:
-- The whole thing MUST fit on one page (tight margins, small font via the CSS)
-- Reorder skills and rewrite the summary to front-match this job's keywords
+ATS Rules (strictly follow these):
+- Use ONLY plain single-column markdown — no tables, no multi-column layouts, no text boxes
+- Use standard section headings (Summary, Skills, Experience, Education) — ATS scanners match on these exact words
+- Mirror keywords and phrases from the job description verbatim — do not paraphrase (e.g. "RESTful APIs" not "REST APIs" if that is what the JD says)
+- Include every required skill and tool mentioned in the job description that the candidate has, even if already listed elsewhere
+- Do not use icons, special characters, or decorative symbols
 - Bold all numbers/metrics: **100,000+**, **99% uptime**, **$250K**, **90%**, **40%**, **50%**, **70%**
+- The whole thing MUST fit on one page
 - Output ONLY the markdown (starting with ---), no preamble, no code fences
 """.strip()
 
