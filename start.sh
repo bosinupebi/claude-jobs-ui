@@ -10,10 +10,18 @@ if ! command -v python3 &>/dev/null; then
   exit 1
 fi
 
-# Install Flask if missing
-if ! python3 -c "import flask" 2>/dev/null; then
-  echo "Installing Flask..."
-  pip3 install flask --break-system-packages 2>/dev/null || pip3 install flask
+# Install Python dependencies
+echo "Checking Python dependencies..."
+pip3 install -r requirements.txt --break-system-packages -q 2>/dev/null || pip3 install -r requirements.txt -q
+
+# Check for claude CLI (needed for document generation)
+if ! command -v claude &>/dev/null; then
+  echo "Warning: 'claude' CLI not found. Document generation will use the Anthropic SDK fallback." >&2
+fi
+
+# Check for md-to-pdf (needed for PDF generation)
+if ! command -v md-to-pdf &>/dev/null; then
+  echo "Warning: 'md-to-pdf' not found. Install it with: npm install -g md-to-pdf" >&2
 fi
 
 PORT=5050

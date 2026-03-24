@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job Search Config</title>
+  <title>Job Search</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
     body { background: #f8f9fa; padding-top: 56px; }
@@ -68,6 +68,33 @@
     /* Navbar settings icon */
     .navbar-settings-btn { color: #adb5bd !important; font-size: 1.1rem; text-decoration: none; line-height: 1; }
     .navbar-settings-btn:hover { color: #fff !important; }
+
+    /* Run log */
+    #run-log {
+      background: #1e1e2e; color: #cdd6f4; font-family: monospace;
+      font-size: .8rem; border-radius: .5rem; padding: 14px 16px;
+      height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+    }
+    .run-status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .run-status-dot.running { background: #ffc107; animation: pulse 1s infinite; }
+    .run-status-dot.idle { background: #6c757d; }
+    .run-status-dot.success { background: #198754; }
+    .run-status-dot.failed { background: #dc3545; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* Job result cards */
+    .job-card { border-left: 4px solid #dee2e6; }
+    .job-card.tier-1 { border-left-color: #198754; }
+    .job-card.tier-2 { border-left-color: #0dcaf0; }
+    .job-card.tier-3 { border-left-color: #adb5bd; }
+
+    /* README modal */
+    #readme-body { font-family: system-ui, sans-serif; line-height: 1.6; }
+    #readme-body h1 { font-size: 1.3rem; margin-bottom: .5rem; }
+    #readme-body h2 { font-size: 1rem; margin-top: 1.2rem; border-bottom: 1px solid #dee2e6; padding-bottom: 4px; }
+    #readme-body strong { font-weight: 600; }
+    #readme-body hr { margin: .75rem 0; }
+    #readme-body a { color: #0d6efd; }
   </style>
 </head>
 <body>
@@ -75,8 +102,8 @@
 <!-- Navbar -->
 <nav class="navbar navbar-dark fixed-top px-3 py-2 d-flex justify-content-between align-items-center">
   <div class="d-flex align-items-center gap-3">
-    <span class="navbar-brand mb-0">Job Search Config</span>
-    <a href="#" class="navbar-settings-btn" title="Settings" onclick="openSetupModal(); return false;">&#9881;</a>
+    <span class="navbar-brand mb-0">Job Search</span>
+    <a href="#" class="navbar-settings-btn" title="Settings" onclick="openSettingsModal(); return false;">&#9881;</a>
   </div>
   <button id="save-btn" class="btn btn-primary btn-sm px-4" onclick="saveConfig()">Save All Changes</button>
 </nav>
@@ -88,7 +115,9 @@
 
   <!-- Tabs -->
   <ul class="nav nav-tabs" id="main-tabs">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-profile">Profile</button></li>
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-run">Run</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-results">Results</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-profile">Profile</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sources">Sources</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-search">Search</button></li>
     <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-scoring">Scoring</button></li>
@@ -98,8 +127,34 @@
 
   <div class="tab-content">
 
-    <!-- ═══════════════════════════════════════════════════════ PROFILE TAB -->
-    <div class="tab-pane fade show active" id="tab-profile">
+    <!-- ════════════════════════════════════════════════════════════ RUN TAB -->
+    <div class="tab-pane fade show active" id="tab-run">
+      <div class="card mb-4">
+        <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <span class="run-status-dot idle" id="run-dot"></span>
+            <span id="run-status-text">Idle</span>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="btn-dry-run" class="btn btn-sm btn-outline-secondary" onclick="startRun(true)">Dry Run</button>
+            <button id="btn-run" class="btn btn-sm btn-success" onclick="startRun(false)">&#9654; Run Now</button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div id="run-log">Waiting for a run...</div>
+        </div>
+      </div>
+    </div><!-- /run tab -->
+
+    <!-- ══════════════════════════════════════════════════════════ RESULTS TAB -->
+    <div class="tab-pane fade" id="tab-results">
+      <div id="results-container">
+        <div class="text-muted text-center py-5">Loading results...</div>
+      </div>
+    </div><!-- /results tab -->
+
+    <!-- ══════════════════════════════════════════════════════════ PROFILE TAB -->
+    <div class="tab-pane fade" id="tab-profile">
 
       <!-- Contact -->
       <div class="card mb-4">
@@ -157,7 +212,7 @@
       </div>
     </div><!-- /profile tab -->
 
-    <!-- ═══════════════════════════════════════════════════════ SOURCES TAB -->
+    <!-- ══════════════════════════════════════════════════════════ SOURCES TAB -->
     <div class="tab-pane fade" id="tab-sources">
       <p class="text-muted small mb-3">Toggle sources on/off. Disabled sources are skipped during the daily run. Your queries and URLs are always preserved.</p>
       <div id="sources-list" class="row g-3"></div>
@@ -166,23 +221,27 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════ SEARCH TAB -->
+    <!-- ══════════════════════════════════════════════════════════ SEARCH TAB -->
     <div class="tab-pane fade" id="tab-search">
       <div class="card mb-4">
         <div class="card-header fw-semibold">Search Settings</div>
         <div class="card-body">
           <div class="row g-4">
             <div class="col-md-6">
-              <label class="form-label">Canadian Location <span class="text-muted small">(used by Job Bank Canada)</span></label>
-              <input id="s-location" class="form-control" oninput="markDirty()">
+              <label class="form-label">Canadian Location <span class="text-muted small">(strict filter — jobs outside this city/province are dropped)</span></label>
+              <input id="s-location" class="form-control" placeholder="e.g. Toronto, ON" oninput="markDirty()">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Days Back <span class="text-muted small">(fetch jobs posted within)</span></label>
+              <label class="form-label">Days Back <span class="text-muted small">(RSS fetch window)</span></label>
               <input id="s-days-back" class="form-control" type="number" min="1" max="30" oninput="markDirty()">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Jobs Per Run <span class="text-muted small">(max results to process)</span></label>
+              <label class="form-label">Jobs Per Run <span class="text-muted small">(max results)</span></label>
               <input id="s-max-results" class="form-control" type="number" min="1" max="20" oninput="markDirty()">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Max Job Age <span class="text-muted small">(days — drop older postings)</span></label>
+              <input id="s-max-age" class="form-control" type="number" min="1" max="30" oninput="markDirty()">
             </div>
             <div class="col-12">
               <label class="form-label">Exclude Keywords <span class="text-muted small">(skip jobs whose title/description contains these)</span></label>
@@ -193,7 +252,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════ SCORING TAB -->
+    <!-- ══════════════════════════════════════════════════════════ SCORING TAB -->
     <div class="tab-pane fade" id="tab-scoring">
       <div class="row g-4 mb-4">
         <div class="col-md-6">
@@ -241,7 +300,7 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════ CLEANUP TAB -->
+    <!-- ══════════════════════════════════════════════════════════ CLEANUP TAB -->
     <div class="tab-pane fade" id="tab-cleanup">
       <div class="card mb-4">
         <div class="card-header fw-semibold">Folder Retention Policy</div>
@@ -269,10 +328,10 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════ SETUP TAB -->
+    <!-- ══════════════════════════════════════════════════════════ SETUP TAB -->
     <div class="tab-pane fade" id="tab-setup">
       <div class="alert alert-info mb-4">
-        This tab shows the shell commands to install and manage the daily scheduler (launchd). Run these yourself in Terminal — the UI doesn't touch launchd.
+        This tab shows shell commands to install and manage the daily scheduler (launchd). Run these yourself in Terminal — the UI doesn't touch launchd directly.
       </div>
       <div id="setup-commands"></div>
     </div>
@@ -280,30 +339,30 @@
   </div><!-- /tab-content -->
 </div><!-- /container -->
 
-<!-- ══════════════════════════════════════════════════════ SETUP MODAL -->
-<div class="modal fade" id="setup-modal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+<!-- ══════════════════════════════════════════════════ SETTINGS MODAL -->
+<div class="modal fade" id="settings-modal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Setup — Connect to config.json</h5>
+        <h5 class="modal-title">Settings</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted small mb-3">Point this UI at the <code>config.json</code> file used by your job search pipeline. The file stays on your machine — nothing is uploaded.</p>
         <div class="mb-3">
-          <label class="form-label fw-semibold">Path to config.json <span class="text-danger">*</span></label>
-          <input id="setup-config-path" class="form-control font-monospace" placeholder="/path/to/claude-jobs/config.json">
-          <div class="form-text">Absolute path. You may use <code>~</code> for your home directory.</div>
+          <label class="form-label fw-semibold">Pipeline Directory</label>
+          <input id="settings-pipeline-dir" class="form-control font-monospace" readonly>
+          <div class="form-text">Read-only. This is where job output folders and config.json live.</div>
         </div>
         <div class="mb-1">
           <label class="form-label fw-semibold">launchd Service Name <span class="text-muted small">(optional)</span></label>
-          <input id="setup-plist-name" class="form-control font-monospace" placeholder="com.jobsearch.plist">
-          <div class="form-text">Used in the Setup tab shell commands. Leave blank to use <code>com.jobsearch.plist</code>.</div>
+          <input id="settings-plist-name" class="form-control font-monospace" placeholder="com.bo.jobsearch.plist">
+          <div class="form-text">Used in the Setup tab shell commands.</div>
         </div>
-        <div id="setup-error" class="alert alert-danger mt-3 mb-0 d-none"></div>
+        <div id="settings-error" class="alert alert-danger mt-3 mb-0 d-none"></div>
       </div>
       <div class="modal-footer">
-        <button id="setup-cancel-btn" class="btn btn-secondary d-none" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save</button>
       </div>
     </div>
   </div>
@@ -367,6 +426,25 @@
   </div>
 </div>
 
+<!-- README modal -->
+<div class="modal fade" id="readme-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title" id="readme-modal-title">Job Details</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="readme-body"></div>
+      </div>
+      <div class="modal-footer">
+        <a id="readme-apply-btn" class="btn btn-primary btn-sm" href="#" target="_blank" rel="noopener">Apply</a>
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast container -->
 <div class="toast-container">
   <div id="app-toast" class="toast align-items-center border-0" role="alert">
@@ -382,9 +460,10 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════════
-let rawConfig = null;   // original from server (preserves _comment keys)
+let rawConfig = null;
 let appMeta   = null;
 let isDirty   = false;
+let _pollInterval = null;
 
 function markDirty() {
   isDirty = true;
@@ -475,6 +554,7 @@ const SOURCE_META = {
   himalayas:           { label: 'Himalayas',       type: 'JSON API', kind: 'queries+limit' },
   realworkfromanywhere:{ label: 'Real Work From Anywhere', type: 'RSS', kind: 'feeds' },
   jobicy:              { label: 'Jobicy',           type: 'RSS', kind: 'url' },
+  indeed:              { label: 'Indeed',           type: 'RSS', kind: 'feeds' },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -555,8 +635,6 @@ function bulletRowHTML(text) {
 
 function addBullet(btn) {
   const list = btn.closest('.accordion-body').querySelector('.bullets-list');
-  const row = document.createElement('div');
-  row.outerHTML; // dummy
   list.insertAdjacentHTML('beforeend', bulletRowHTML(''));
   const newRow = list.lastElementChild;
   initBulletDrag(list);
@@ -646,7 +724,6 @@ function populateSources(sources, disabledList) {
   container.innerHTML = '';
   const disabled = new Set(disabledList);
 
-  // Built-in sources
   Object.entries(SOURCE_META).forEach(([key, meta]) => {
     const src = sources[key] || {};
     const isDisabled = disabled.has(key);
@@ -682,7 +759,6 @@ function populateSources(sources, disabledList) {
     }
   });
 
-  // Custom sources
   Object.entries(sources).forEach(([key, src]) => {
     if (!src || !src.custom) return;
     container.appendChild(buildCustomSourceCard(key, src, disabled));
@@ -693,7 +769,6 @@ function buildCustomSourceCard(key, src, disabled) {
   const isDisabled = disabled.has(key);
   const toggleId = `src-toggle-${key}`;
   const cardId = `src-card-${key}`;
-
   const typeMap   = { rss: 'RSS', api: 'JSON API', search_rss: 'Search RSS' };
   const colorMap  = { rss: 'primary', api: 'success', search_rss: 'primary' };
   const typeLabel = typeMap[src.type] || src.type || 'Custom';
@@ -803,7 +878,6 @@ function toggleSource(key, enabled) {
   markDirty();
 }
 
-// ── Add / delete custom sources ───────────────────────────────────────────────
 function openAddSourceModal() {
   document.getElementById('new-src-name').value = '';
   document.getElementById('new-src-type').value = 'rss';
@@ -873,17 +947,18 @@ function deleteCustomSource(key) {
 
 // ── Search ───────────────────────────────────────────────────────────────────
 function populateSearch(s) {
-  document.getElementById('s-location').value    = s.canada_location     || '';
-  document.getElementById('s-days-back').value   = s.days_back           || 1;
-  document.getElementById('s-max-results').value = s.max_results_per_tier|| 5;
+  document.getElementById('s-location').value    = s.canada_location      || '';
+  document.getElementById('s-days-back').value   = s.days_back            || 1;
+  document.getElementById('s-max-results').value = s.max_results_per_tier || 5;
+  document.getElementById('s-max-age').value     = s.max_job_age_days     || 3;
   tags.excludeKeywords.setValues(s.exclude_keywords || []);
 }
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
 function populateScoring(sc) {
-  tags.tier1Kw.setValues(sc.tier1_keywords       || []);
+  tags.tier1Kw.setValues(sc.tier1_keywords         || []);
   tags.tier1Bonus.setValues(sc.tier1_bonus_keywords || []);
-  tags.tier2Kw.setValues(sc.tier2_keywords       || []);
+  tags.tier2Kw.setValues(sc.tier2_keywords          || []);
   document.getElementById('tier1-threshold').value = sc.tier1_threshold || 2;
   document.getElementById('tier2-threshold').value = sc.tier2_threshold || 2;
   const rb = sc.remote_bonus != null ? sc.remote_bonus : 0.5;
@@ -930,20 +1005,12 @@ function populateSetup(meta) {
       code: `cp "${plistPath}" "${launchAgents}/"\nlaunchctl load "${launchAgents}/${plistName}"`,
     },
     {
-      title: '3. Run the job search manually right now',
-      code: `cd "${pipelineDir}" && python3 job_search_daily.py`,
-    },
-    {
-      title: '4. Dry run (preview only — no files created)',
-      code: `cd "${pipelineDir}" && python3 job_search_daily.py --dry-run`,
-    },
-    {
-      title: "5. View today's log",
-      code: `cat "${pipelineDir}/logs/$(date +%Y-%m-%d).log"`,
-    },
-    {
-      title: '6. Uninstall the scheduler',
+      title: '3. Uninstall the scheduler',
       code: `launchctl unload ${plistDest}\nrm ${plistDest}`,
+    },
+    {
+      title: "4. View today's log",
+      code: `cat "${pipelineDir}/logs/$(date +%Y-%m-%d).log"`,
     },
   ];
 
@@ -967,42 +1034,39 @@ function copyCode(btn) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SETUP MODAL
+// SETTINGS MODAL
 // ═══════════════════════════════════════════════════════════════════════════════
-function openSetupModal() {
+function openSettingsModal() {
+  document.getElementById('settings-pipeline-dir').value = appMeta ? appMeta.pipeline_dir : '';
   fetch('/api/settings')
     .then(r => r.json())
     .then(s => {
-      document.getElementById('setup-config-path').value = s.config_path || '';
-      document.getElementById('setup-plist-name').value  = s.plist_name  || 'com.jobsearch.plist';
-      document.getElementById('setup-error').classList.add('d-none');
-      // Show Cancel only if already configured (so user can dismiss)
-      document.getElementById('setup-cancel-btn').classList.toggle('d-none', !s.config_path);
-      bootstrap.Modal.getOrCreateInstance(document.getElementById('setup-modal')).show();
+      document.getElementById('settings-plist-name').value = s.plist_name || 'com.bo.jobsearch.plist';
+      document.getElementById('settings-error').classList.add('d-none');
+      bootstrap.Modal.getOrCreateInstance(document.getElementById('settings-modal')).show();
     });
 }
 
-async function saveSetup() {
-  const errEl      = document.getElementById('setup-error');
+async function saveSettings() {
+  const errEl = document.getElementById('settings-error');
   errEl.classList.add('d-none');
-  const configPath = document.getElementById('setup-config-path').value.trim();
-  const plistName  = document.getElementById('setup-plist-name').value.trim() || 'com.jobsearch.plist';
-  if (!configPath) {
-    errEl.textContent = 'Config path is required.';
-    errEl.classList.remove('d-none');
-    return;
-  }
+  const plistName = document.getElementById('settings-plist-name').value.trim() || 'com.bo.jobsearch.plist';
   try {
     const res  = await fetch('/api/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config_path: configPath, plist_name: plistName }),
+      body: JSON.stringify({ plist_name: plistName }),
     });
     const data = await res.json();
     if (data.ok) {
-      location.reload();
+      bootstrap.Modal.getInstance(document.getElementById('settings-modal')).hide();
+      showToast('Settings saved.', 'success');
+      // refresh meta so setup tab updates
+      const cfgRes = await fetch('/api/config');
+      const cfgData = await cfgRes.json();
+      if (cfgData.meta) { appMeta = cfgData.meta; populateSetup(appMeta); }
     } else {
-      errEl.textContent = data.error || 'Failed to save settings.';
+      errEl.textContent = data.error || 'Failed to save.';
       errEl.classList.remove('d-none');
     }
   } catch (err) {
@@ -1012,13 +1076,174 @@ async function saveSetup() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// RUN PIPELINE
+// ═══════════════════════════════════════════════════════════════════════════════
+function setRunUI(running) {
+  document.getElementById('btn-run').disabled     = running;
+  document.getElementById('btn-dry-run').disabled = running;
+}
+
+function setRunDot(state) {
+  const dot  = document.getElementById('run-dot');
+  const text = document.getElementById('run-status-text');
+  dot.className = `run-status-dot ${state}`;
+  const labels = { running: 'Running…', idle: 'Idle', success: 'Completed', failed: 'Failed' };
+  text.textContent = labels[state] || state;
+}
+
+async function startRun(dryRun) {
+  setRunUI(true);
+  setRunDot('running');
+  document.getElementById('run-log').textContent = dryRun ? '— Dry run starting… —\n' : '— Run starting… —\n';
+  try {
+    const res  = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: dryRun }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setRunDot('failed');
+      setRunUI(false);
+      showToast(data.error || 'Failed to start run.', 'danger');
+      return;
+    }
+    startPolling();
+  } catch (err) {
+    setRunDot('failed');
+    setRunUI(false);
+    showToast(err.message, 'danger');
+  }
+}
+
+function startPolling() {
+  if (_pollInterval) clearInterval(_pollInterval);
+  _pollInterval = setInterval(pollRunStatus, 2000);
+}
+
+async function pollRunStatus() {
+  try {
+    const res  = await fetch('/api/run/status');
+    const data = await res.json();
+
+    const logEl = document.getElementById('run-log');
+    logEl.textContent = data.log || '(no log output yet)';
+    logEl.scrollTop = logEl.scrollHeight;
+
+    if (!data.running) {
+      clearInterval(_pollInterval);
+      _pollInterval = null;
+      setRunUI(false);
+      if (data.exit_code === 0) {
+        setRunDot('success');
+        loadResults(); // refresh results tab
+      } else if (data.exit_code !== null) {
+        setRunDot('failed');
+        showToast(`Run failed with exit code ${data.exit_code}.`, 'danger');
+      }
+    }
+  } catch (err) {
+    // network hiccup — keep polling
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RESULTS TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadResults() {
+  const container = document.getElementById('results-container');
+  try {
+    const res  = await fetch('/api/jobs');
+    const data = await res.json();
+
+    if (!data.length) {
+      container.innerHTML = '<div class="text-muted text-center py-5">No job results yet. Run the pipeline to generate results.</div>';
+      return;
+    }
+
+    container.innerHTML = data.map(dateGroup => `
+      <div class="mb-4">
+        <h6 class="text-muted fw-semibold mb-3">${esc(dateGroup.date)}</h6>
+        <div class="row g-3">
+          ${dateGroup.jobs.map(job => buildJobCard(dateGroup.date, job)).join('')}
+        </div>
+      </div>`).join('');
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-danger">Failed to load results: ${esc(err.message)}</div>`;
+  }
+}
+
+function buildJobCard(date, job) {
+  const tierClass = job.tier ? `tier-${job.tier}` : '';
+  const tierBadge = job.tier
+    ? `<span class="badge ${job.tier === 1 ? 'bg-success' : job.tier === 2 ? 'bg-info text-dark' : 'bg-secondary'}">Tier ${job.tier}</span>`
+    : '';
+  const scoreBadge = job.score !== '' ? `<span class="badge bg-light text-dark border">Score ${job.score}</span>` : '';
+  const applyBtn = job.url
+    ? `<a href="${esc(job.url)}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">Apply</a>`
+    : '';
+  const pdfBadges = [
+    job.has_cover ? '<span class="badge bg-light text-dark border">Cover PDF</span>' : '',
+    job.has_resume ? '<span class="badge bg-light text-dark border">Resume PDF</span>' : '',
+  ].filter(Boolean).join('');
+
+  return `
+    <div class="col-12 col-md-6">
+      <div class="card job-card ${tierClass} h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <h6 class="card-title mb-0">${esc(job.title)}</h6>
+            <div class="d-flex gap-1 flex-shrink-0 ms-2">${tierBadge}${scoreBadge}</div>
+          </div>
+          <div class="text-muted small mb-2">${esc(job.company)}</div>
+          ${pdfBadges ? `<div class="d-flex gap-1 mb-2">${pdfBadges}</div>` : ''}
+          <div class="d-flex gap-2 mt-auto">
+            <button class="btn btn-sm btn-outline-secondary" onclick="viewReadme('${esc(date)}', '${esc(job.slug)}', '${esc(job.title)}', '${esc(job.url || '')}')">Details</button>
+            ${applyBtn}
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+async function viewReadme(date, slug, title, url) {
+  document.getElementById('readme-modal-title').textContent = title || slug;
+  document.getElementById('readme-body').innerHTML = '<div class="text-muted">Loading…</div>';
+  document.getElementById('readme-apply-btn').href = url || '#';
+  document.getElementById('readme-apply-btn').style.display = url ? '' : 'none';
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('readme-modal')).show();
+
+  try {
+    const res  = await fetch(`/api/jobs/${encodeURIComponent(date)}/${encodeURIComponent(slug)}/readme`);
+    const data = await res.json();
+    document.getElementById('readme-body').innerHTML = renderMarkdown(data.content || '');
+  } catch (err) {
+    document.getElementById('readme-body').innerHTML = `<div class="text-danger">Failed to load: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderMarkdown(md) {
+  // Minimal markdown renderer: headings, bold, hr, links, paragraphs
+  return md
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^---$/gm, '<hr>')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^(?!<[h|h|p|h])(.+)$/gm, '$1')
+    .replace(/^<\/p><p>/, '')
+    .trimStart();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // COLLECT (UI → data)
 // ═══════════════════════════════════════════════════════════════════════════════
 function collectAll() {
-  // Deep clone raw to preserve _comment keys and custom source data
   const out = JSON.parse(JSON.stringify(rawConfig));
 
-  // Candidate
   out.candidate.name     = document.getElementById('p-name').value;
   out.candidate.title    = document.getElementById('p-title').value;
   out.candidate.email    = document.getElementById('p-email').value;
@@ -1031,10 +1256,7 @@ function collectAll() {
   out.candidate.experience = collectExperience();
   out.candidate.education  = collectEducation();
 
-  // Sources
   const disabledSources = [];
-
-  // Built-in sources
   Object.keys(SOURCE_META).forEach(key => {
     const toggle = document.getElementById(`src-toggle-${key}`);
     if (toggle && !toggle.checked) disabledSources.push(key);
@@ -1065,7 +1287,6 @@ function collectAll() {
     out.sources[key] = src;
   });
 
-  // Custom sources — data already preserved via rawConfig clone; just capture disabled toggle
   Object.keys(out.sources).forEach(key => {
     if (out.sources[key] && out.sources[key].custom) {
       const toggle = document.getElementById(`src-toggle-${key}`);
@@ -1075,13 +1296,12 @@ function collectAll() {
 
   out.disabled_sources = disabledSources;
 
-  // Search
   out.search.canada_location      = document.getElementById('s-location').value;
   out.search.days_back            = parseInt(document.getElementById('s-days-back').value) || 1;
   out.search.max_results_per_tier = parseInt(document.getElementById('s-max-results').value) || 5;
+  out.search.max_job_age_days     = parseInt(document.getElementById('s-max-age').value) || 3;
   out.search.exclude_keywords     = tags.excludeKeywords.getValues();
 
-  // Scoring
   out.scoring.tier1_keywords       = tags.tier1Kw.getValues();
   out.scoring.tier1_bonus_keywords = tags.tier1Bonus.getValues();
   out.scoring.tier2_keywords       = tags.tier2Kw.getValues();
@@ -1089,7 +1309,6 @@ function collectAll() {
   out.scoring.tier2_threshold      = parseInt(document.getElementById('tier2-threshold').value) || 2;
   out.scoring.remote_bonus         = parseFloat(document.getElementById('remote-bonus').value) || 0.5;
 
-  // Cleanup
   out.cleanup.trigger_after_days = parseInt(document.getElementById('cleanup-trigger').value) || 7;
   out.cleanup.keep_days          = parseInt(document.getElementById('cleanup-keep').value) || 2;
 
@@ -1179,44 +1398,40 @@ async function init() {
     const res  = await fetch('/api/config');
     const data = await res.json();
 
-    // First-run: no config path configured yet
-    if (data.setup_required) {
-      openSetupModal();
-      return;
-    }
-
     if (!res.ok) {
       document.querySelector('.container-lg').innerHTML = `
         <div class="alert alert-danger mt-4">
           <h5>Cannot load configuration</h5>
           <p>${esc(data.error || 'Server error ' + res.status)}</p>
           <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Retry</button>
-          <button class="btn btn-sm btn-outline-secondary ms-2" onclick="openSetupModal()">Change Path</button>
         </div>`;
       return;
     }
 
-    rawConfig  = data.config;
-    appMeta    = data.meta;
+    rawConfig = data.config;
+    appMeta   = data.meta;
     populateAll(rawConfig);
     populateSetup(appMeta);
   } catch (err) {
     document.querySelector('.container-lg').innerHTML = `
       <div class="alert alert-danger mt-4">
-        <h5>Failed to connect to the config server</h5>
+        <h5>Failed to connect to the server</h5>
         <p>${esc(err.message)}</p>
       </div>`;
+    return;
   }
+
+  // Load results and poll for any in-progress run
+  loadResults();
+  pollRunStatus();
 }
 
 document.addEventListener('DOMContentLoaded', init);
 
-// Warn on unload if dirty
 window.addEventListener('beforeunload', e => {
   if (isDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
-// Sync cleanup labels on input
 document.getElementById('cleanup-trigger').addEventListener('input', updateCleanupLabels);
 document.getElementById('cleanup-keep').addEventListener('input', updateCleanupLabels);
 </script>
