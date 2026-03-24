@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-job_search_daily.py — Autonomous Daily Job Search for Bo Osinupebi
+job_search_daily.py — Autonomous Daily Job Search Pipeline
 ===================================================================
 
 PURPOSE
@@ -1214,7 +1214,7 @@ def main() -> int:
     Entry point. Returns exit code (0 = success, 1 = partial failure, 2 = total failure).
     """
     parser = argparse.ArgumentParser(
-        description="Autonomous daily job search for Bo Osinupebi",
+        description="Autonomous daily job search pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
