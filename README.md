@@ -50,15 +50,9 @@ bash start.sh
 3. Start the Flask server on `http://localhost:5050` (falls back to `:5051`)
 4. Open your browser automatically after 1.5 seconds
 
-**First run:** A setup screen will appear asking for the path to your pipeline's `config.json`. Enter the absolute path (e.g. `~/path/to/claude-jobs/config.json`) and click **Save & Continue**. This path is saved locally in `settings.json` (gitignored) and never committed.
+**First run:** The UI loads immediately — no setup required. Edit `config.json` in the repo folder with your own details before starting if you want to pre-populate the form.
 
 Press **Ctrl+C** in the Terminal to stop the server.
-
----
-
-## Reconfiguring the config path
-
-Click the **⚙** gear icon in the top navigation bar at any time to reopen the setup screen and change the config path or launchd service name.
 
 ---
 
@@ -86,13 +80,14 @@ Each of the built-in job board sources has a toggle switch in its card header. D
 
 | Source | Type | Notes |
 |--------|------|-------|
-| Job Bank Canada | RSS | Canadian gov't board |
+| Job Bank Canada | RSS | Canadian gov't board — strictly filtered to `canada_location` |
 | Remotive | JSON API | Global remote — max ~4 req/day |
 | We Work Remotely | RSS | Curated remote — full-stack + back-end |
 | RemoteOK | RSS | Broad global remote |
 | Himalayas | JSON API | Global remote — multi-query search |
 | Real Work From Anywhere | RSS | Category remote feeds |
 | Jobicy | RSS | Dev jobs incl. hybrid and onsite |
+| Indeed | RSS | Add one URL per search (e.g. `https://www.indeed.com/rss?q=software+developer&l=Toronto`) |
 
 **Adding a custom source** — Click **+ Add Source** at the bottom of the sources list. Choose a type (RSS Feed, JSON API, or Search-based RSS), enter the details, and click **Add Source**. Custom sources appear with a **Custom** badge and a trash icon to delete them.
 
@@ -135,7 +130,7 @@ claude-jobs-ui/
     └── index.html      Single-page Bootstrap 5 app (all tabs + JS inline)
 ```
 
-`settings.json` is created on first run and is gitignored — it stores your local config path.
+`settings.json` is created on first run and is gitignored — it stores your launchd service name preference.
 
 ---
 
@@ -173,7 +168,7 @@ The test suite covers:
 
 ### `settings.json`
 
-Stores the path to `config.json` and the launchd service name. Created by the setup screen on first run. Gitignored — never committed to the repo.
+Stores the launchd service name preference. Created on first save. Gitignored — never committed to the repo.
 
 ### `disabled_sources` key
 
@@ -189,9 +184,8 @@ The config file may contain `_comment` and similar keys for human readability. T
 
 | Problem | Fix |
 |---------|-----|
-| Setup screen appears every time | `settings.json` was deleted or is unreadable — re-enter the config path |
 | Browser doesn't open | Navigate manually to `http://localhost:5050` |
 | Port already in use | `start.sh` falls back to `:5051` automatically |
-| "config.json not found" error | The path in Settings is wrong or the file doesn't exist — click ⚙ to reconfigure |
+| "config.json not found" error | `config.json` is missing from the repo folder — restore it from `config.json.bak` or re-clone |
 | Flask not found | Run `pip3 install flask` manually, then re-run `start.sh` |
 | Save fails with "Missing required keys" | The config is missing a top-level section — restore from `config.json.bak` |
