@@ -103,8 +103,13 @@
     },
 
     "indeed": {
-      "_comment": "Indeed RSS feeds — add one URL per search (e.g. https://www.indeed.com/rss?q=software+developer&l=Toronto).",
-      "feeds": []
+      "_comment": "Indeed RSS — feed URLs are built from these queries + canada_location automatically.",
+      "queries": [
+        "full stack developer",
+        "software engineer",
+        "react developer",
+        "node.js developer"
+      ]
     }
   },
 

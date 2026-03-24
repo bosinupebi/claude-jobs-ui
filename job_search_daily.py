@@ -450,11 +450,53 @@ def fetch_jobicy(config: dict, logger: logging.Logger) -> list[dict]:
         return []
 
 
+# ─── SOURCE 8: INDEED RSS ─────────────────────────────────────────────────────
+# Builds one RSS URL per query using canada_location from config.
+# URL format: https://www.indeed.com/rss?q=<query>&l=<location>&sort=date
+# Note: Indeed restricts RSS access inconsistently — empty results are possible.
+
+def fetch_indeed(config: dict, logger: logging.Logger) -> list[dict]:
+    """Fetch jobs from Indeed RSS, building feed URLs from configured queries and location."""
+    cfg      = config["sources"].get("indeed", {})
+    queries  = cfg.get("queries", [])
+    location = config["search"]["canada_location"]
+    source   = "Indeed"
+    jobs: list[dict] = []
+    for query in queries:
+        url = (
+            f"https://www.indeed.com/rss"
+            f"?q={quote_plus(query)}"
+            f"&l={quote_plus(location)}"
+            f"&sort=date"
+        )
+        try:
+            feed = feedparser.parse(url)
+            for e in feed.entries:
+                raw   = getattr(e, "summary", "") or ""
+                desc  = _clean_html(raw)
+                title = getattr(e, "title", "")
+                loc   = getattr(e, "location", "") or location
+                is_remote = any(w in (title + desc + loc).lower() for w in ["remote", "work from home", "wfh"])
+                if link := getattr(e, "link", ""):
+                    jobs.append(make_job(
+                        title=title,
+                        company=getattr(e, "author", ""),
+                        location=loc,
+                        description=desc,
+                        url=link, source=source, is_remote=is_remote,
+                        published=getattr(e, "published", ""), query=query,
+                    ))
+            logger.info(f"  Indeed '{query}': {len([j for j in jobs])} entries")
+        except Exception as exc:
+            logger.warning(f"  Indeed '{query}' failed: {exc}")
+    return jobs
+
+
 # ─── AGGREGATE: FETCH ALL SOURCES ─────────────────────────────────────────────
 
 def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
     """
-    Fetch jobs from all 7 configured sources in parallel.
+    Fetch jobs from all configured sources in parallel.
     Deduplicates by URL across all sources before returning.
 
     Sources:
@@ -465,6 +507,7 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
       5. Himalayas API        — global remote, multi-query
       6. Real Work From Anywhere RSS — category remote feeds
       7. Jobicy RSS           — dev jobs incl. remote/hybrid/onsite
+      8. Indeed RSS           — per-search RSS feeds
     """
     fetchers = [
         fetch_jobbank,
@@ -474,6 +517,7 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
         fetch_himalayas,
         fetch_realworkfromanywhere,
         fetch_jobicy,
+        fetch_indeed,
     ]
 
     # Respect sources disabled via the UI (config key: "disabled_sources")
