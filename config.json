@@ -66,14 +66,6 @@
       "limit": 100
     },
 
-    "weworkremotely": {
-      "_comment": "Curated remote jobs by category. Full-stack + back-end RSS feeds.",
-      "feeds": [
-        "https://weworkremotely.com/categories/remote-full-stack-programming-jobs.rss",
-        "https://weworkremotely.com/categories/remote-back-end-programming-jobs.rss"
-      ]
-    },
-
     "remoteok": {
       "_comment": "Broad global remote job board. Single RSS feed.",
       "url": "https://remoteok.com/rss"

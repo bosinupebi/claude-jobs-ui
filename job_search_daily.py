@@ -10,7 +10,7 @@ Each run:
   1. Fetches jobs from 7 sources in parallel (Canada + USA + Remote):
        - Job Bank Canada RSS     (Canadian gov't board, Toronto + all Canada)
        - Remotive API            (global remote, software-dev category)
-       - We Work Remotely RSS    (full-stack + back-end remote feeds)
+
        - RemoteOK RSS            (broad global remote)
        - Himalayas API           (global remote, multiple queries)
        - Real Work From Anywhere (full-stack + backend remote RSS)
@@ -267,46 +267,6 @@ def fetch_remotive(config: dict, logger: logging.Logger) -> list[dict]:
         return []
 
 
-# ─── SOURCE 3: WE WORK REMOTELY RSS ──────────────────────────────────────────
-# Curated remote jobs by category. Full-stack + back-end feeds. No auth.
-# URLs: https://weworkremotely.com/categories/remote-{category}-jobs.rss
-
-def fetch_weworkremotely(config: dict, logger: logging.Logger) -> list[dict]:
-    """Fetch jobs from We Work Remotely RSS feeds (full-stack + back-end)."""
-    feeds  = config["sources"]["weworkremotely"]["feeds"]
-    source = "We Work Remotely"
-    results: list[dict] = []
-
-    def _fetch_one(feed_url: str) -> list[dict]:
-        try:
-            feed = feedparser.parse(feed_url)
-            jobs = []
-            for e in feed.entries:
-                raw = getattr(e, "summary", "") or ""
-                desc = _clean_html(raw)
-                title = getattr(e, "title", "")
-                # WWR titles are "Company: Role" — split if possible
-                company = ""
-                if ": " in title:
-                    company, title = title.split(": ", 1)
-                if link := getattr(e, "link", ""):
-                    jobs.append(make_job(
-                        title=title, company=company,
-                        location="Remote", description=desc,
-                        url=link, source=source, is_remote=True,
-                        published=getattr(e, "published", ""),
-                    ))
-            logger.info(f"  WWR {feed_url.split('/')[-1]}: {len(jobs)} entries")
-            return jobs
-        except Exception as exc:
-            logger.warning(f"  WWR {feed_url} failed: {exc}")
-            return []
-
-    with ThreadPoolExecutor(max_workers=len(feeds)) as pool:
-        for batch in pool.map(_fetch_one, feeds):
-            results.extend(batch)
-    return results
-
 
 # ─── SOURCE 4: REMOTEOK RSS ───────────────────────────────────────────────────
 # Broad global remote job board. Standard RSS. No auth required.
@@ -502,7 +462,7 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
     Sources:
       1. Job Bank Canada RSS  — Canadian gov't board
       2. Remotive API         — global remote, software-dev
-      3. We Work Remotely RSS — curated remote full-stack + back-end
+
       4. RemoteOK RSS         — broad global remote
       5. Himalayas API        — global remote, multi-query
       6. Real Work From Anywhere RSS — category remote feeds
@@ -512,7 +472,6 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
     fetchers = [
         fetch_jobbank,
         fetch_remotive,
-        fetch_weworkremotely,
         fetch_remoteok,
         fetch_himalayas,
         fetch_realworkfromanywhere,
