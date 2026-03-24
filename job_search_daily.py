@@ -1017,21 +1017,28 @@ def write_readme(folder: Path, job: dict, tier: int, score: float) -> None:
     (folder / "README.md").write_text(content, encoding="utf-8")
 
 
-def write_cover_letter(folder: Path, content: str) -> Path:
-    """Write cover-letter.md, prepending the PDF front matter."""
+def _name_slug(name: str) -> str:
+    """Convert a candidate name to a filename-safe slug, e.g. 'Bo Osinupebi' → 'bo-osinupebi'."""
+    return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+
+def write_cover_letter(folder: Path, content: str, candidate_name: str) -> Path:
+    """Write <name>-cover-letter.md, prepending the PDF front matter."""
     # If the generated content already has front matter, don't add it again
     if content.strip().startswith("---"):
         full_content = content
     else:
         full_content = PDF_FRONT_MATTER + content
-    path = folder / "cover-letter.md"
+    slug = _name_slug(candidate_name)
+    path = folder / f"{slug}-cover-letter.md"
     path.write_text(full_content, encoding="utf-8")
     return path
 
 
-def write_resume(folder: Path, content: str) -> Path:
-    """Write resume.md — content should already include front matter from the prompt."""
-    path = folder / "resume.md"
+def write_resume(folder: Path, content: str, candidate_name: str) -> Path:
+    """Write <name>-resume.md — content should already include front matter from the prompt."""
+    slug = _name_slug(candidate_name)
+    path = folder / f"{slug}-resume.md"
     path.write_text(content, encoding="utf-8")
     return path
 
@@ -1123,14 +1130,15 @@ def process_job(
 
     # Cover letter
     cl_prompt = build_cover_letter_prompt(job, config)
+    candidate_name = config["candidate"]["name"]
     cl_text = generate_text(cl_prompt, config, logger)
     if cl_text:
-        cl_path = write_cover_letter(folder, cl_text)
+        cl_path = write_cover_letter(folder, cl_text, candidate_name)
         summary["cover_letter"] = True
-        logger.info(f"  ✓ cover-letter.md")
+        logger.info(f"  ✓ {cl_path.name}")
         if generate_pdf(cl_path, logger):
             summary["pdf_cover"] = True
-            logger.info(f"  ✓ cover-letter.pdf")
+            logger.info(f"  ✓ {cl_path.stem}.pdf")
     else:
         logger.warning(f"  ✗ cover letter generation failed — README only for this job")
 
@@ -1138,12 +1146,12 @@ def process_job(
     res_prompt = build_resume_prompt(job, config)
     res_text = generate_text(res_prompt, config, logger)
     if res_text:
-        res_path = write_resume(folder, res_text)
+        res_path = write_resume(folder, res_text, candidate_name)
         summary["resume"] = True
-        logger.info(f"  ✓ resume.md")
+        logger.info(f"  ✓ {res_path.name}")
         if generate_pdf(res_path, logger):
             summary["pdf_resume"] = True
-            logger.info(f"  ✓ resume.pdf")
+            logger.info(f"  ✓ {res_path.stem}.pdf")
     else:
         logger.warning(f"  ✗ resume generation failed — README only for this job")
 
