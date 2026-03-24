@@ -24,7 +24,7 @@ SETTINGS_FILE = BASE_DIR / "settings.json"
 LOGS_DIR = BASE_DIR / "logs"
 PIPELINE_SCRIPT = BASE_DIR / "job_search_daily.py"
 
-PLIST_NAME_DEFAULT = "com.bo.jobsearch.plist"
+PLIST_NAME_DEFAULT = "com.example.jobsearch.plist"
 REQUIRED_KEYS = {"candidate", "search", "sources", "scoring", "cleanup", "tools"}
 
 app = Flask(__name__)

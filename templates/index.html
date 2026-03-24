@@ -355,7 +355,7 @@
         </div>
         <div class="mb-1">
           <label class="form-label fw-semibold">launchd Service Name <span class="text-muted small">(optional)</span></label>
-          <input id="settings-plist-name" class="form-control font-monospace" placeholder="com.bo.jobsearch.plist">
+          <input id="settings-plist-name" class="form-control font-monospace" placeholder="com.example.jobsearch.plist">
           <div class="form-text">Used in the Setup tab shell commands.</div>
         </div>
         <div id="settings-error" class="alert alert-danger mt-3 mb-0 d-none"></div>
@@ -1041,7 +1041,7 @@ function openSettingsModal() {
   fetch('/api/settings')
     .then(r => r.json())
     .then(s => {
-      document.getElementById('settings-plist-name').value = s.plist_name || 'com.bo.jobsearch.plist';
+      document.getElementById('settings-plist-name').value = s.plist_name || 'com.example.jobsearch.plist';
       document.getElementById('settings-error').classList.add('d-none');
       bootstrap.Modal.getOrCreateInstance(document.getElementById('settings-modal')).show();
     });
@@ -1050,7 +1050,7 @@ function openSettingsModal() {
 async function saveSettings() {
   const errEl = document.getElementById('settings-error');
   errEl.classList.add('d-none');
-  const plistName = document.getElementById('settings-plist-name').value.trim() || 'com.bo.jobsearch.plist';
+  const plistName = document.getElementById('settings-plist-name').value.trim() || 'com.example.jobsearch.plist';
   try {
     const res  = await fetch('/api/settings', {
       method: 'POST',
