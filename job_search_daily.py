@@ -201,9 +201,12 @@ def fetch_jobbank(config: dict, logger: logging.Logger) -> list[dict]:
                 # Enforce canada_location from config: keep only matching city/province, national, or remote.
                 loc_lower = loc.lower()
                 is_remote_loc = "remote" in loc_lower
+                # Split the job location into comma-separated tokens for exact matching.
+                # Substring matching (e.g. "on" in "montreal") causes false positives.
+                loc_tokens = [t.strip() for t in loc_lower.split(",")]
                 is_allowed_location = (
-                    (_allowed_city     and _allowed_city     in loc_lower) or
-                    (_allowed_province and _allowed_province in loc_lower)
+                    (_allowed_city     and any(_allowed_city     == t for t in loc_tokens)) or
+                    (_allowed_province and any(_allowed_province == t for t in loc_tokens))
                 )
                 is_national = loc_lower in ("canada", "") or loc_lower.startswith("canada,")
                 if not (is_allowed_location or is_national or is_remote_loc):
