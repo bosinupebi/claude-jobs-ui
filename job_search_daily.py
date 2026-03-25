@@ -455,6 +455,101 @@ def fetch_indeed(config: dict, logger: logging.Logger) -> list[dict]:
     return jobs
 
 
+# ─── SOURCE 9: CAREER SITES ───────────────────────────────────────────────────
+# Accepts a list of company career page URLs. Auto-detects Ashby, Greenhouse,
+# and Lever by scanning the page HTML for known ATS link patterns, then hits
+# their public JSON APIs directly — no scraping needed.
+
+def _detect_ats(html: str) -> tuple[str, str]:
+    """Return (platform, identifier) by scanning career page HTML for ATS links."""
+    m = re.search(r'jobs\.ashbyhq\.com/([^/"]+)', html)
+    if m:
+        return ("ashby", m.group(1))
+    m = re.search(r'boards\.greenhouse\.io/([^/"]+)', html)
+    if m:
+        return ("greenhouse", m.group(1))
+    m = re.search(r'jobs\.lever\.co/([^/"]+)', html)
+    if m:
+        return ("lever", m.group(1))
+    return ("unknown", "")
+
+
+def _fetch_ashby_jobs(org: str, source: str) -> list[dict]:
+    resp = requests.get(f"https://api.ashbyhq.com/posting-api/job-board/{org}", timeout=15)
+    resp.raise_for_status()
+    jobs = []
+    for j in resp.json().get("jobs", []):
+        if not j.get("isListed"):
+            continue
+        loc = j.get("location") or ("Remote" if j.get("isRemote") else "")
+        jobs.append(make_job(
+            title=j.get("title", ""), company=org, location=loc,
+            description=_clean_html(j.get("descriptionHtml", "") or j.get("descriptionPlain", "")),
+            url=j.get("jobUrl", ""), source=source,
+            is_remote=j.get("isRemote", False), published=j.get("publishedAt", ""),
+        ))
+    return jobs
+
+
+def _fetch_greenhouse_jobs(company: str, source: str) -> list[dict]:
+    resp = requests.get(
+        f"https://boards-api.greenhouse.io/v1/boards/{company}/jobs?content=true", timeout=15
+    )
+    resp.raise_for_status()
+    jobs = []
+    for j in resp.json().get("jobs", []):
+        loc = j.get("location", {}).get("name", "")
+        jobs.append(make_job(
+            title=j.get("title", ""), company=company, location=loc,
+            description=_clean_html(j.get("content", "")),
+            url=j.get("absolute_url", ""), source=source,
+            is_remote="remote" in loc.lower(), published=j.get("updated_at", ""),
+        ))
+    return jobs
+
+
+def _fetch_lever_jobs(company: str, source: str) -> list[dict]:
+    resp = requests.get(f"https://api.lever.co/v0/postings/{company}?mode=json", timeout=15)
+    resp.raise_for_status()
+    jobs = []
+    for j in resp.json():
+        loc = j.get("categories", {}).get("location", "")
+        jobs.append(make_job(
+            title=j.get("text", ""), company=company, location=loc,
+            description=j.get("descriptionPlain", "") or _clean_html(j.get("description", "")),
+            url=j.get("hostedUrl", ""), source=source,
+            is_remote="remote" in loc.lower(), published=str(j.get("createdAt", "")),
+        ))
+    return jobs
+
+
+def fetch_career_sites(config: dict, logger: logging.Logger) -> list[dict]:
+    """Fetch jobs from company career pages by auto-detecting the ATS platform."""
+    urls = config["sources"].get("career_sites", {}).get("urls", [])
+    if not urls:
+        return []
+    all_jobs: list[dict] = []
+    for site_url in urls:
+        try:
+            resp = requests.get(site_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            platform, identifier = _detect_ats(resp.text)
+            source = f"Career Site ({identifier})"
+            if platform == "ashby":
+                jobs = _fetch_ashby_jobs(identifier, source)
+            elif platform == "greenhouse":
+                jobs = _fetch_greenhouse_jobs(identifier, source)
+            elif platform == "lever":
+                jobs = _fetch_lever_jobs(identifier, source)
+            else:
+                logger.warning(f"  Career site {site_url}: unsupported ATS — try Ashby, Greenhouse, or Lever")
+                jobs = []
+            logger.info(f"  {source}: {len(jobs)} jobs")
+            all_jobs.extend(jobs)
+        except Exception as exc:
+            logger.warning(f"  Career site {site_url} failed: {exc}")
+    return all_jobs
+
+
 # ─── AGGREGATE: FETCH ALL SOURCES ─────────────────────────────────────────────
 
 def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
@@ -465,12 +560,12 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
     Sources:
       1. Job Bank Canada RSS  — Canadian gov't board
       2. Remotive API         — global remote, software-dev
-
       4. RemoteOK RSS         — broad global remote
       5. Himalayas API        — global remote, multi-query
       6. Real Work From Anywhere RSS — category remote feeds
       7. Jobicy RSS           — dev jobs incl. remote/hybrid/onsite
       8. Indeed RSS           — per-search RSS feeds
+      9. Career Sites         — company career pages (Ashby/Greenhouse/Lever)
     """
     fetchers = [
         fetch_jobbank,
@@ -480,6 +575,7 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
         fetch_realworkfromanywhere,
         fetch_jobicy,
         fetch_indeed,
+        fetch_career_sites,
     ]
 
     # Respect sources disabled via the UI (config key: "disabled_sources")

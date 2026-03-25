@@ -1,19 +1,14 @@
 {
   "_comment": "Configuration for job_search_daily.py — edit these values to tune job search behaviour",
-
   "candidate": {
-    "name": "Your Name",
-    "title": "Full-Stack Software Developer",
-    "email": "you@example.com",
-    "phone": "555-000-0000",
-    "location": "Toronto, ON",
-    "linkedin": "https://linkedin.com/in/your-profile",
-    "github": "https://github.com/your-username",
-    "summary": "Full-Stack Software Developer with X years of experience building scalable, secure platforms. Specialised in RESTful API development, test automation, and cloud infrastructure.",
-    "skills": [
-      "JavaScript", "Python", "Node.js", "React", "TypeScript",
-      "SQL", "HTML5", "CSS", "RESTful APIs", "Git"
+    "education": [
+      {
+        "degree": "Bachelor of Science in Computer Science",
+        "school": "University of Toronto",
+        "dates": "Sep 2015 – Jun 2019"
+      }
     ],
+    "email": "you@example.com",
     "experience": [
       {
         "title": "Software Developer",
@@ -27,71 +22,87 @@
         ]
       }
     ],
-    "education": [
-      {
-        "degree": "Bachelor of Science in Computer Science",
-        "school": "University of Toronto",
-        "dates": "Sep 2015 – Jun 2019"
-      }
-    ]
+    "github": "https://github.com/your-username",
+    "linkedin": "https://linkedin.com/in/your-profile",
+    "location": "Toronto, ON",
+    "name": "Your Name",
+    "phone": "555-000-0000",
+    "skills": [
+      "JavaScript",
+      "Python",
+      "Node.js",
+      "React",
+      "TypeScript",
+      "SQL",
+      "HTML5",
+      "CSS",
+      "RESTful APIs",
+      "Git"
+    ],
+    "summary": "Full-Stack Software Developer with X years of experience building scalable, secure platforms. Specialised in RESTful API development, test automation, and cloud infrastructure.",
+    "title": "Full-Stack Software Developer"
   },
-
+  "cleanup": {
+    "_comment": "Folder retention policy. Cleanup only triggers once trigger_after_days folders exist, then keeps the newest keep_days and deletes the rest.",
+    "keep_days": 2,
+    "trigger_after_days": 7
+  },
+  "scoring": {
+    "_comment_remote": "Remote jobs get +0.5 score bonus — preferred but not required",
+    "remote_bonus": 0.5,
+    "tier1_bonus_keywords": [
+      "sql",
+      "restful",
+      "api",
+      "typescript",
+      "cloud"
+    ],
+    "tier1_keywords": [
+      "react",
+      "node",
+      "python",
+      "typescript",
+      "azure"
+    ],
+    "tier1_threshold": 2,
+    "tier2_keywords": [
+      "javascript",
+      "node.js",
+      "react",
+      "typescript"
+    ],
+    "tier2_threshold": 2
+  },
   "search": {
     "canada_location": "Toronto, ON",
     "days_back": 1,
-    "max_job_age_days": 3,
-    "max_results_per_tier": 5,
     "exclude_keywords": [
-      "machine learning engineer", "data engineer", "devops engineer",
-      "embedded", "firmware", "mobile only", "android only", "ios only"
-    ]
+      "machine learning engineer",
+      "data engineer",
+      "devops engineer",
+      "embedded",
+      "firmware",
+      "mobile only",
+      "android only",
+      "ios only"
+    ],
+    "max_job_age_days": 3,
+    "max_results_per_tier": 5
   },
-
   "sources": {
     "_comment": "All sources are free and require no API keys",
-
-    "jobbank": {
-      "_comment": "Government of Canada job board. Canadian roles. Atom RSS feed.",
-      "queries": [
-        "full stack developer",
-        "senior software developer",
-        "software engineer",
-        "react developer",
-        "node.js developer"
-      ]
-    },
-
-    "remotive": {
-      "_comment": "Global remote jobs JSON API. software-dev category. Max 4 req/day.",
-      "limit": 100
-    },
-
-    "remoteok": {
-      "_comment": "Broad global remote job board. Single RSS feed.",
-      "url": "https://remoteok.com/rss"
-    },
-
     "himalayas": {
       "_comment": "Global remote jobs JSON API. Supports keyword search.",
+      "limit": 20,
       "queries": [
         "full stack developer",
         "react node developer",
         "software engineer"
-      ],
-      "limit": 20
-    },
-
-    "realworkfromanywhere": {
-      "_comment": "Category-specific remote RSS feeds. Full-stack + backend.",
-      "feeds": [
-        "https://www.realworkfromanywhere.com/remote-fullstack-jobs/rss.xml",
-        "https://www.realworkfromanywhere.com/remote-backend-jobs/rss.xml"
       ]
     },
-
-    "jobicy": {
-      "_comment": "Dev jobs RSS — includes remote, hybrid, and onsite roles.",
-      "url": "https://jobicy.com/?feed=job_feed&job_categories=dev&job_types=full-time"
+    "career_sites": {
+      "_comment": "Company career page URLs. Supports Ashby, Greenhouse, and Lever automatically.",
+      "urls": []
     },
 
     "indeed": {
@@ -102,28 +113,41 @@
         "react developer",
         "node.js developer"
       ]
+    },
+    "jobbank": {
+      "_comment": "Government of Canada job board. Canadian roles. Atom RSS feed.",
+      "queries": [
+        "full stack developer",
+        "senior software developer",
+        "software engineer",
+        "react developer",
+        "node.js developer"
+      ]
+    },
+    "jobicy": {
+      "_comment": "Dev jobs RSS — includes remote, hybrid, and onsite roles.",
+      "url": "https://jobicy.com/?feed=job_feed&job_categories=dev&job_types=full-time"
+    },
+    "realworkfromanywhere": {
+      "_comment": "Category-specific remote RSS feeds. Full-stack + backend.",
+      "feeds": [
+        "https://www.realworkfromanywhere.com/remote-fullstack-jobs/rss.xml",
+        "https://www.realworkfromanywhere.com/remote-backend-jobs/rss.xml"
+      ]
+    },
+    "remoteok": {
+      "_comment": "Broad global remote job board. Single RSS feed.",
+      "url": "https://remoteok.com/rss"
+    },
+    "remotive": {
+      "_comment": "Global remote jobs JSON API. software-dev category. Max 4 req/day.",
+      "limit": 100
     }
   },
-
-  "scoring": {
-    "tier1_keywords": ["react", "node", "python", "typescript", "azure"],
-    "tier1_threshold": 2,
-    "tier1_bonus_keywords": ["sql", "restful", "api", "typescript", "cloud"],
-    "tier2_keywords": ["javascript", "node.js", "react", "typescript"],
-    "tier2_threshold": 2,
-    "remote_bonus": 0.5,
-    "_comment_remote": "Remote jobs get +0.5 score bonus — preferred but not required"
-  },
-
-  "cleanup": {
-    "_comment": "Folder retention policy. Cleanup only triggers once trigger_after_days folders exist, then keeps the newest keep_days and deletes the rest.",
-    "trigger_after_days": 7,
-    "keep_days": 2
-  },
-
   "tools": {
-    "md_to_pdf": "md-to-pdf",
     "claude_cli": "claude",
-    "claude_model_fallback": "claude-haiku-4-5-20251001"
-  }
+    "claude_model_fallback": "claude-haiku-4-5-20251001",
+    "md_to_pdf": "md-to-pdf"
+  },
+  "disabled_sources": []
 }
