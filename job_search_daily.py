@@ -8,7 +8,7 @@ PURPOSE
 Runs daily (via macOS launchd or cron) without any human interaction.
 Each run:
   1. Fetches jobs from 7 sources in parallel (Canada + USA + Remote):
-       - Job Bank Canada RSS     (Canadian gov't board, Toronto + all Canada)
+       - Job Bank Canada RSS     (Canadian gov't board, configured city + all Canada)
        - Remotive API            (global remote, software-dev category)
 
        - RemoteOK RSS            (broad global remote)
@@ -22,7 +22,7 @@ Each run:
   6. Skips jobs already seen in previous runs (deduplication via seen_jobs.json)
   7. Generates a tailored README, cover letter, and one-page resume for each job
   8. Converts all documents to PDF using md-to-pdf
-  9. Organises output into:  claude jobs/YYYY-MM-DD/01-Company-Role/
+  9. Organises output into:  YYYY-MM-DD/01-Company-Role/
 
 REQUIREMENTS
 ------------
@@ -40,7 +40,7 @@ USAGE
 
 OUTPUT STRUCTURE
 ----------------
-  claude jobs/
+  output/
     2026-03-22/
       01-CIBC-Full-Stack-NET/
         README.md
@@ -77,6 +77,12 @@ from urllib.parse import quote_plus
 import feedparser
 import requests
 
+try:
+    import pypdf as _pypdf
+    _HAS_PYPDF = True
+except ImportError:
+    _HAS_PYPDF = False
+
 
 # ─── PATHS ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +113,19 @@ css: |
 ---
 
 """
+
+README_FIT_PLACEHOLDER = "*(Auto-generated — review and customise before applying)*"
+DEFAULT_TEXT_GENERATION_TIMEOUT = 120
+DEFAULT_ANTHROPIC_MODEL_FALLBACK = "claude-haiku-4-5-20251001"
+DEFAULT_GENERATION_PROVIDER_ORDER = ["claude_cli", "anthropic_api", "codex_cli"]
+SUPPORTED_GENERATION_PROVIDERS = set(DEFAULT_GENERATION_PROVIDER_ORDER)
+TEXT_GENERATION_PREAMBLE = (
+    "CONTEXT: You are a text generation assistant. "
+    "All source content is provided inline in this prompt. "
+    "There are no external files, no iCloud folders, and no file system access required. "
+    "Do not reference file paths, directories, or storage locations. "
+    "Output only the requested document.\n\n"
+)
 
 
 # ─── JOB NORMALISATION ────────────────────────────────────────────────────────
@@ -176,7 +195,7 @@ def fetch_jobbank(config: dict, logger: logging.Logger) -> list[dict]:
     source    = "Job Bank Canada"
     results: list[dict] = []
 
-    # Parse city and province from canada_location (e.g. "Toronto, ON" → "toronto", "on")
+    # Parse city and province from canada_location (e.g. "City, Province" → "city", "province")
     _loc_parts = [p.strip().lower() for p in location.split(",")]
     _allowed_city     = _loc_parts[0] if _loc_parts else ""
     _allowed_province = _loc_parts[1] if len(_loc_parts) > 1 else ""
@@ -455,6 +474,59 @@ def fetch_indeed(config: dict, logger: logging.Logger) -> list[dict]:
     return jobs
 
 
+# ─── SOURCE 10: THE MUSE API ──────────────────────────────────────────────────
+# Free public JSON API. No auth required. Supports category and location filters.
+# URL: https://www.themuse.com/api/public/jobs
+
+def fetch_themuse(config: dict, logger: logging.Logger) -> list[dict]:
+    """Fetch jobs from The Muse API for each configured category."""
+    cfg        = config["sources"].get("themuse", {})
+    categories = cfg.get("queries", [])
+    pages      = max(1, int(cfg.get("limit", 1)))
+    source     = "The Muse"
+    results: list[dict] = []
+
+    def _fetch_one(category: str) -> list[dict]:
+        jobs = []
+        for page in range(pages):
+            try:
+                resp = requests.get(
+                    "https://www.themuse.com/api/public/jobs",
+                    params={"category": category, "page": page, "per_page": 20},
+                    timeout=15,
+                    headers={"User-Agent": "Mozilla/5.0"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                for j in data.get("results", []):
+                    locs = j.get("locations", [])
+                    loc  = locs[0]["name"] if locs else "Remote"
+                    link = j.get("refs", {}).get("landing_page", "")
+                    if link:
+                        jobs.append(make_job(
+                            title=j.get("name", ""),
+                            company=j.get("company", {}).get("name", ""),
+                            location=loc,
+                            description=_clean_html(j.get("contents", "")),
+                            url=link, source=source,
+                            is_remote="remote" in loc.lower() or "flexible" in loc.lower(),
+                            published=j.get("publication_date", ""),
+                            query=category,
+                        ))
+                if page + 1 >= data.get("page_count", 1):
+                    break
+            except Exception as exc:
+                logger.warning(f"  The Muse '{category}' page {page} failed: {exc}")
+                break
+        logger.info(f"  The Muse '{category}': {len(jobs)} entries")
+        return jobs
+
+    with ThreadPoolExecutor(max_workers=max(1, len(categories))) as pool:
+        for batch in pool.map(_fetch_one, categories):
+            results.extend(batch)
+    return results
+
+
 # ─── SOURCE 9: CAREER SITES ───────────────────────────────────────────────────
 # Accepts a list of company career page URLs. Auto-detects Ashby, Greenhouse,
 # and Lever by scanning the page HTML for known ATS link patterns, then hits
@@ -465,7 +537,7 @@ def _detect_ats(html: str) -> tuple[str, str]:
     m = re.search(r'jobs\.ashbyhq\.com/([^/"]+)', html)
     if m:
         return ("ashby", m.group(1))
-    m = re.search(r'boards\.greenhouse\.io/([^/"]+)', html)
+    m = re.search(r'(?:job-boards|boards)\.greenhouse\.io/([^/"]+)', html)
     if m:
         return ("greenhouse", m.group(1))
     m = re.search(r'jobs\.lever\.co/([^/"]+)', html)
@@ -523,16 +595,34 @@ def _fetch_lever_jobs(company: str, source: str) -> list[dict]:
     return jobs
 
 
+def _detect_ats_from_url(url: str) -> tuple[str, str] | None:
+    """Detect ATS platform directly from a known ATS URL, without fetching HTML."""
+    m = re.search(r'jobs\.ashbyhq\.com/([^/?#]+)', url)
+    if m:
+        return ("ashby", m.group(1))
+    m = re.search(r'(?:job-boards|boards)\.greenhouse\.io/([^/?#]+)', url)
+    if m:
+        return ("greenhouse", m.group(1))
+    m = re.search(r'jobs\.lever\.co/([^/?#]+)', url)
+    if m:
+        return ("lever", m.group(1))
+    return None
+
+
 def fetch_career_sites(config: dict, logger: logging.Logger) -> list[dict]:
     """Fetch jobs from company career pages by auto-detecting the ATS platform."""
-    urls = config["sources"].get("career_sites", {}).get("urls", [])
+    urls = config["sources"].get("career_sites", {}).get("feeds", [])
     if not urls:
         return []
     all_jobs: list[dict] = []
     for site_url in urls:
         try:
-            resp = requests.get(site_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-            platform, identifier = _detect_ats(resp.text)
+            detected = _detect_ats_from_url(site_url)
+            if detected:
+                platform, identifier = detected
+            else:
+                resp = requests.get(site_url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+                platform, identifier = _detect_ats(resp.text)
             source = f"Career Site ({identifier})"
             if platform == "ashby":
                 jobs = _fetch_ashby_jobs(identifier, source)
@@ -548,6 +638,108 @@ def fetch_career_sites(config: dict, logger: logging.Logger) -> list[dict]:
         except Exception as exc:
             logger.warning(f"  Career site {site_url} failed: {exc}")
     return all_jobs
+
+
+# ─── SOURCE 11: SERPAPI GOOGLE JOBS ──────────────────────────────────────────
+# Uses SerpAPI to query Google Jobs. Free tier: 250 searches/month.
+# Each query+location pair = 1 search credit.
+
+def _extract_serpapi_published(job: dict) -> str:
+    """Extract the best available posted-time string from a SerpAPI Google Jobs result."""
+    candidates: list[str] = []
+
+    for value in job.get("extensions", []):
+        if isinstance(value, str):
+            candidates.append(value.strip())
+
+    detected = job.get("detected_extensions", {})
+    if isinstance(detected, dict):
+        for key in ("posted_at", "posted_on", "posted", "date_posted"):
+            value = detected.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip())
+
+    for key in ("posted_at", "posted_on", "posted", "date_posted"):
+        value = job.get(key)
+        if isinstance(value, str) and value.strip():
+            candidates.append(value.strip())
+
+    for value in candidates:
+        lower = value.lower()
+        if (
+            "ago" in lower
+            or "today" in lower
+            or "yesterday" in lower
+            or "just posted" in lower
+            or re.search(r"\b\d{4}-\d{2}-\d{2}\b", value)
+        ):
+            return value
+
+    return ""
+
+def fetch_serpapi(config: dict, logger: logging.Logger) -> list[dict]:
+    """Fetch jobs from Google Jobs via SerpAPI for each query × location combination.
+    Only runs on weekdays to conserve the free-tier 250 searches/month quota.
+    """
+    cfg      = config["sources"].get("serpapi", {})
+    queries  = cfg.get("queries", [])
+    api_key  = os.environ.get("SERPAPI_KEY", "").strip()
+    # Use serpapi_locations if set, otherwise fall back to main locations list
+    locations = cfg.get("serpapi_locations") or config["search"].get("locations", [])
+    source   = "Google Jobs"
+    results: list[dict] = []
+
+    if not api_key:
+        logger.warning("  SerpAPI: SERPAPI_KEY not set — skipping")
+        return []
+
+    search_locations = locations if locations else ["remote"]
+    credits = len(queries) * len(search_locations)
+    logger.info(f"  SerpAPI: {len(queries)} queries × {len(search_locations)} locations = {credits} credits this run")
+
+    def _fetch_one(query: str, location: str) -> list[dict]:
+        jobs = []
+        try:
+            resp = requests.get(
+                "https://serpapi.com/search",
+                params={
+                    "engine":   "google_jobs",
+                    "q":        query,
+                    "location": location,
+                    "api_key":  api_key,
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            for j in resp.json().get("jobs_results", []):
+                apply_opts = j.get("apply_options", [])
+                link = apply_opts[0].get("link", "") if apply_opts else ""
+                if not link:
+                    continue
+                loc = j.get("location", location)
+                is_remote = "remote" in loc.lower() or "remote" in j.get("title", "").lower()
+                published = _extract_serpapi_published(j)
+                jobs.append(make_job(
+                    title=j.get("title", ""),
+                    company=j.get("company_name", ""),
+                    location=loc,
+                    description=j.get("description", ""),
+                    url=link, source=source,
+                    is_remote=is_remote,
+                    published=published,
+                    query=query,
+                ))
+            logger.info(f"  SerpAPI '{query}' @ {location}: {len(jobs)} entries")
+        except Exception as exc:
+            logger.warning(f"  SerpAPI '{query}' @ {location} failed: {exc}")
+        return jobs
+
+    pairs = [(q, loc) for q in queries for loc in search_locations]
+    with ThreadPoolExecutor(max_workers=min(8, len(pairs))) as pool:
+        futures = [pool.submit(_fetch_one, q, loc) for q, loc in pairs]
+        for f in as_completed(futures):
+            results.extend(f.result())
+    return results
 
 
 # ─── AGGREGATE: FETCH ALL SOURCES ─────────────────────────────────────────────
@@ -566,6 +758,8 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
       7. Jobicy RSS           — dev jobs incl. remote/hybrid/onsite
       8. Indeed RSS           — per-search RSS feeds
       9. Career Sites         — company career pages (Ashby/Greenhouse/Lever)
+     10. The Muse API         — broad job board, category + location filters
+     11. SerpAPI Google Jobs  — Google Jobs via SerpAPI, query × location
     """
     fetchers = [
         fetch_jobbank,
@@ -576,6 +770,8 @@ def fetch_all_jobs(config: dict, logger: logging.Logger) -> list[dict]:
         fetch_jobicy,
         fetch_indeed,
         fetch_career_sites,
+        fetch_themuse,
+        fetch_serpapi,
     ]
 
     # Respect sources disabled via the UI (config key: "disabled_sources")
@@ -722,14 +918,51 @@ def score_job(job: dict, config: dict) -> tuple[int, float]:
 
 # ─── AGE FILTER ───────────────────────────────────────────────────────────────
 
+def _relative_age_in_days(published: str) -> float | None:
+    """Parse relative published strings like '3 days ago' or 'yesterday'."""
+    text = published.strip().lower()
+    if not text:
+        return None
+
+    if "today" in text or "just posted" in text or "just now" in text:
+        return 0.0
+    if "yesterday" in text:
+        return 1.0
+
+    match = re.search(
+        r"(\d+)\+?\s*(minutes?|mins?|hours?|hrs?|hr|days?|weeks?|wks?|wk|months?|mos?|mo|d|h|w)\b",
+        text,
+    )
+    if not match:
+        return None
+
+    qty = int(match.group(1))
+    unit = match.group(2)
+    if unit in ("minute", "minutes", "min", "mins"):
+        return qty / 1440
+    if unit in ("hour", "hours", "hr", "hrs", "h"):
+        return qty / 24
+    if unit in ("day", "days", "d"):
+        return float(qty)
+    if unit in ("week", "weeks", "wk", "wks", "w"):
+        return float(qty * 7)
+    if unit in ("month", "months", "mo", "mos"):
+        return float(qty * 30)
+    return None
+
 def is_recent(published: str, max_days: int) -> bool:
     """
     Return True if the published date string is within max_days of today,
     or if the date cannot be parsed (pass-through so we don't drop undated jobs).
-    Handles RFC 2822 (feedparser) and ISO 8601 formats.
+    Handles RFC 2822, ISO 8601, and relative phrases like "3 days ago".
     """
     if not published:
         return True  # no date — don't discard
+
+    relative_days = _relative_age_in_days(published)
+    if relative_days is not None:
+        return relative_days <= max_days
+
     from email.utils import parsedate_to_datetime
     now = datetime.now(tz=datetime.now().astimezone().tzinfo)
     for parser in (
@@ -773,7 +1006,7 @@ def validate_url(url: str, timeout: int = 5) -> tuple[bool, int]:
             # Server doesn't support HEAD — try GET
             resp = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True)
             resp.close()
-        is_live = resp.status_code in (200, 301, 302)
+        is_live = resp.status_code in (200, 301, 302, 403)
         return is_live, resp.status_code
     except requests.exceptions.Timeout:
         return False, 0
@@ -808,23 +1041,101 @@ def save_seen_jobs(seen: dict) -> None:
 
 # ─── TEXT GENERATION ──────────────────────────────────────────────────────────
 
-def find_claude_cli() -> str | None:
-    """
-    Locate the claude CLI binary.
-    Checks PATH first, then the known nvm location.
-    """
-    # Try PATH
-    found = shutil.which("claude")
+def _find_cli_binary(binary_name: str, known_paths: list[Path], configured_value: str = "") -> str | None:
+    """Resolve a CLI binary from config, PATH, or a small set of known local paths."""
+    if configured_value:
+        configured_path = Path(configured_value).expanduser()
+        if configured_path.exists():
+            return str(configured_path)
+        found = shutil.which(configured_value)
+        if found:
+            return found
+
+    found = shutil.which(binary_name)
     if found:
         return found
-    # Known nvm location on this machine
-    nvm_path = Path.home() / ".nvm/versions/node/v23.1.0/bin/claude"
-    if nvm_path.exists():
-        return str(nvm_path)
+
+    for path in known_paths:
+        if path.exists():
+            return str(path)
     return None
 
 
-def generate_with_claude_cli(prompt: str, logger: logging.Logger) -> str | None:
+def find_claude_cli(config: dict | None = None) -> str | None:
+    """
+    Locate the claude CLI binary.
+    Checks configured value, PATH, then the known nvm location.
+    """
+    tools = (config or {}).get("tools", {})
+    return _find_cli_binary(
+        "claude",
+        [Path.home() / ".nvm/versions/node/v23.1.0/bin/claude"],
+        tools.get("claude_cli", ""),
+    )
+
+
+def find_codex_cli(config: dict | None = None) -> str | None:
+    """Locate the Codex CLI binary."""
+    tools = (config or {}).get("tools", {})
+    return _find_cli_binary(
+        "codex",
+        [Path.home() / ".nvm/versions/node/v23.1.0/bin/codex"],
+        tools.get("codex_cli", ""),
+    )
+
+
+def _get_generation_provider_order(config: dict, logger: logging.Logger) -> list[str]:
+    """
+    Return the configured provider order, appending any missing providers in default order.
+    Invalid entries are ignored.
+    """
+    tools = config.get("tools", {})
+    configured = tools.get("generation_provider_order")
+    if not isinstance(configured, list):
+        return DEFAULT_GENERATION_PROVIDER_ORDER.copy()
+
+    providers: list[str] = []
+    seen: set[str] = set()
+    invalid: list[str] = []
+    for item in configured:
+        if item not in SUPPORTED_GENERATION_PROVIDERS:
+            invalid.append(str(item))
+            continue
+        if item in seen:
+            continue
+        providers.append(item)
+        seen.add(item)
+
+    if invalid:
+        logger.warning(
+            "Ignoring unsupported generation providers in config: %s",
+            ", ".join(invalid),
+        )
+
+    for provider in DEFAULT_GENERATION_PROVIDER_ORDER:
+        if provider not in seen:
+            providers.append(provider)
+
+    return providers or DEFAULT_GENERATION_PROVIDER_ORDER.copy()
+
+
+def _get_anthropic_model_fallback(config: dict) -> str:
+    """Read the Anthropic fallback model, preserving the legacy config key as an alias."""
+    tools = config.get("tools", {})
+    return (
+        tools.get("anthropic_model_fallback")
+        or tools.get("claude_model_fallback")
+        or DEFAULT_ANTHROPIC_MODEL_FALLBACK
+    )
+
+
+def _get_codex_model_fallback(config: dict) -> str:
+    """Read the configured Codex fallback model, if any."""
+    tools = config.get("tools", {})
+    return str(tools.get("codex_model_fallback", "") or "").strip()
+
+
+def generate_with_claude_cli(prompt: str, config: dict, logger: logging.Logger) -> str | None:
     """
     Generate text using the locally installed claude CLI.
 
@@ -834,17 +1145,18 @@ def generate_with_claude_cli(prompt: str, logger: logging.Logger) -> str | None:
 
     Returns the generated text, or None on failure.
     """
-    claude_bin = find_claude_cli()
+    claude_bin = find_claude_cli(config)
     if not claude_bin:
         logger.warning("claude CLI not found in PATH or known locations")
         return None
 
     try:
         result = subprocess.run(
-            [claude_bin, "-p", prompt, "--output-format", "text"],
+            [claude_bin, "-p", TEXT_GENERATION_PREAMBLE + prompt, "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=DEFAULT_TEXT_GENERATION_TIMEOUT,
+            cwd=str(Path.home()),
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -859,11 +1171,10 @@ def generate_with_claude_cli(prompt: str, logger: logging.Logger) -> str | None:
         return None
 
 
-def generate_with_api(prompt: str, model: str, logger: logging.Logger) -> str | None:
+def generate_with_anthropic_api(prompt: str, model: str, logger: logging.Logger) -> str | None:
     """
-    Fallback text generation using the Anthropic API directly.
+    Text generation using the Anthropic API directly.
     Requires ANTHROPIC_API_KEY environment variable to be set.
-    Only used if the claude CLI is unavailable.
 
     Returns the generated text, or None on failure.
     """
@@ -890,27 +1201,107 @@ def generate_with_api(prompt: str, model: str, logger: logging.Logger) -> str | 
         return None
 
 
+def generate_with_codex_cli(prompt: str, model: str, config: dict, logger: logging.Logger) -> str | None:
+    """
+    Generate text using the locally installed Codex CLI.
+
+    Calls: codex exec [--model MODEL] via stdin in non-interactive mode.
+    """
+    codex_bin = find_codex_cli(config)
+    if not codex_bin:
+        logger.warning("codex CLI not found in PATH or known locations")
+        return None
+
+    cmd = [
+        codex_bin,
+        "exec",
+        "--skip-git-repo-check",
+        "--sandbox",
+        "read-only",
+        "--color",
+        "never",
+        "--ephemeral",
+        "-C",
+        str(Path.home()),
+    ]
+    if model:
+        cmd.extend(["-m", model])
+
+    try:
+        result = subprocess.run(
+            cmd,
+            input=TEXT_GENERATION_PREAMBLE + prompt,
+            capture_output=True,
+            text=True,
+            timeout=DEFAULT_TEXT_GENERATION_TIMEOUT,
+            cwd=str(Path.home()),
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+
+        stderr_preview = (result.stderr or result.stdout or "")[:200]
+        logger.warning(f"codex exec returned code {result.returncode}: {stderr_preview}")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.warning("codex exec timed out after 120s")
+        return None
+    except Exception as exc:
+        logger.warning(f"codex exec error: {exc}")
+        return None
+
+
 def generate_text(prompt: str, config: dict, logger: logging.Logger) -> str | None:
     """
-    Try claude CLI first, fall back to Anthropic API, return None if both fail.
+    Try configured text generation providers in order and return the first successful result.
     Caller handles the None case gracefully (README-only mode).
     """
-    text = generate_with_claude_cli(prompt, logger)
-    if text:
-        logger.debug("Text generated via claude CLI")
-        return text
+    provider_order = _get_generation_provider_order(config, logger)
 
-    logger.info("claude CLI unavailable — trying Anthropic API fallback")
-    model = config["tools"]["claude_model_fallback"]
-    text = generate_with_api(prompt, model, logger)
-    if text:
-        logger.debug("Text generated via Anthropic API")
-        return text
+    for idx, provider in enumerate(provider_order):
+        logger.info(f"Text generation: trying {provider}")
+
+        if provider == "claude_cli":
+            text = generate_with_claude_cli(prompt, config, logger)
+        elif provider == "anthropic_api":
+            text = generate_with_anthropic_api(
+                prompt,
+                _get_anthropic_model_fallback(config),
+                logger,
+            )
+        elif provider == "codex_cli":
+            text = generate_with_codex_cli(
+                prompt,
+                _get_codex_model_fallback(config),
+                config,
+                logger,
+            )
+        else:
+            text = None
+
+        if text:
+            logger.debug(f"Text generated via {provider}")
+            return text
+
+        if idx < len(provider_order) - 1:
+            logger.info(f"Text generation unavailable via {provider} — trying next provider")
 
     return None
 
 
 # ─── PROMPT BUILDERS ──────────────────────────────────────────────────────────
+
+# Sources where a human recruiter reads the document directly — no keyword scanner.
+_DIRECT_SOURCES = {"Career Sites", "Google Jobs"}
+
+def _is_ats_source(job: dict) -> bool:
+    """Return True if the job came from a source likely to use an ATS keyword scanner."""
+    source = job.get("source", "")
+    # Career Site (coinbase), Career Site (vercel), etc. are direct applications
+    if source.startswith("Career Site"):
+        return False
+    if source in _DIRECT_SOURCES:
+        return False
+    return True
 
 def build_profile_block(config: dict) -> str:
     """Render the candidate's full profile as a text block for use in prompts."""
@@ -943,15 +1334,55 @@ Education:
 """.strip()
 
 
-def build_cover_letter_prompt(job: dict, config: dict) -> str:
+def _candidate_headline(candidate: dict) -> str:
+    """Build a short generic candidate descriptor for prompts."""
+    title = str(candidate.get("title", "") or "").strip()
+    location = str(candidate.get("location", "") or "").strip()
+    if title and location:
+        return f"{title} in {location}"
+    if title:
+        return title
+    if location:
+        return f"candidate based in {location}"
+    return "candidate"
+
+
+def _read_source_file(config: dict, tool_key: str) -> str:
     """
-    Build the prompt used to generate a tailored cover letter.
-    The output should be plain markdown (no code fences), ready to save directly.
+    Read a candidate source document (PDF or plain text) identified by
+    tools.<tool_key> in config.  Returns extracted text, or "" on any failure.
+    """
+    path_str = config.get("tools", {}).get(tool_key, "")
+    if not path_str:
+        return ""
+    path = Path(path_str)
+    if not path.exists():
+        return ""
+    if path.suffix.lower() == ".pdf":
+        if not _HAS_PYPDF:
+            return ""
+        try:
+            reader = _pypdf.PdfReader(str(path))
+            return "\n".join(
+                page.extract_text() or "" for page in reader.pages
+            ).strip()
+        except Exception:
+            return ""
+    if path.suffix.lower() in (".txt", ".md"):
+        return path.read_text(encoding="utf-8", errors="ignore").strip()
+    return ""
+
+
+def build_strong_fit_prompt(job: dict, config: dict) -> str:
+    """
+    Build the prompt used to generate the README "Why You're a Strong Fit" section.
+    The output should be markdown bullets only, ready to insert under the heading.
     """
     profile = build_profile_block(config)
     c = config["candidate"]
+
     return f"""
-You are writing a tailored cover letter for {c['name']}, a Full-Stack Software Developer in Toronto.
+You are writing the "Why You're a Strong Fit" section for a job application README.
 
 JOB DETAILS
 -----------
@@ -966,18 +1397,110 @@ CANDIDATE PROFILE
 
 INSTRUCTIONS
 ------------
-Write a professional, specific cover letter in plain markdown. Structure:
-1. Header: Name, email, phone, date, "Hiring Manager, [Company]"
-2. Opening paragraph: Name the exact role and team. Lead with the most relevant project from the candidate's background.
-3. Body (2-3 paragraphs): Reference specific projects and metrics from the resume. Include 3 bolded bullet points with measurable achievements directly mapped to the job requirements.
-4. Closing: Express genuine interest in the company's specific work. One sentence.
-5. Sign-off: "Sincerely, {c['name']}"
+Write 3-5 concise markdown bullet points explaining why {c['name']} is a strong fit for this role.
 
-Rules:
+Formatting rules:
+- Output ONLY markdown bullet points
+- Do NOT include a heading, intro sentence, code fences, or closing note
+- Write 3-5 bullets total
+- Keep each bullet to one sentence, under 24 words
+
+Content rules:
+- Use only facts supported by the candidate profile
+- Mirror relevant tools, platforms, and domain terms from the job description verbatim when accurate
+- Prioritise the candidate's most relevant projects, technologies, and measurable outcomes
+- Do NOT invent experience, certifications, or domain background
+- Avoid generic filler like "hard worker" or "team player" unless backed by specific evidence
+""".strip()
+
+
+def build_cover_letter_prompt(job: dict, config: dict) -> str:
+    """
+    Build the prompt used to generate a tailored cover letter.
+    The output should be plain markdown (no code fences), ready to save directly.
+    """
+    profile = build_profile_block(config)
+    c = config["candidate"]
+    headline = _candidate_headline(c)
+    source_text = _read_source_file(config, "cover_letter_source")
+    source_section = ""
+    if source_text:
+        source_section = f"""
+BASE COVER LETTER (for tone and style reference — do NOT copy verbatim)
+------------------------------------------------------------------------
+{source_text}
+
+"""
+
+    return f"""
+You are writing a tailored cover letter for {c['name']}, a {headline}.
+
+JOB DETAILS
+-----------
+Title: {job['title']}
+Company: {job['company']}
+Location: {job['location']}
+Description: {job['description']}
+
+CANDIDATE PROFILE
+-----------------
+{profile}
+{source_section}
+INSTRUCTIONS
+------------
+Write a professional, specific cover letter in markdown. You MUST use the exact structure below — do not skip or rename any section heading.
+
+---
+
+# {c['name']}
+[email] · [phone] · [date]
+
+Hiring Manager, [Company]
+
+---
+
+## Opening
+
+[One paragraph: name the exact role and company. Lead with the single most relevant project or achievement.]
+
+---
+
+## Why [Company Name]
+
+[Paragraph 1: specific projects and metrics tied to the company's goals.]
+
+[Paragraph 2: 3 bold bullet points in this format:]
+- **[Achievement label]:** [measurable detail]
+- **[Achievement label]:** [measurable detail]
+- **[Achievement label]:** [measurable detail]
+
+---
+
+## Why Me
+
+[One paragraph: connect the candidate's specific technical background to this role's stack and domain.]
+
+---
+
+[One closing sentence expressing genuine interest in the company's specific work.]
+
+Sincerely,
+
+**{c['name']}**
+
+---
+
+Formatting rules:
+- Output ONLY the markdown above — no code fences, no preamble, no commentary, no notes, no suggestions after the sign-off, no explanations about file access or working directories
+- Do NOT skip or rename the `##` section headings
+- Do NOT use tables or multi-column layouts
+- Keep it to one page when rendered
+
+Content rules:
 - Do NOT use generic phrases like "I am excited to apply" or "I believe I am a strong candidate"
 - Reference actual project names and metrics (100,000+ requests, 99% uptime, $250K revenue, etc.)
-- Keep it to one page when rendered — be concise
-- Output only the markdown text, no code fences, no preamble
+- Use the exact job title from the posting verbatim in the opening
+{"- Mirror 3–5 key skill/tool terms from the job description verbatim (e.g. 'Azure Cognitive Search', 'RESTful APIs', 'NServiceBus') — this application goes through an ATS keyword scanner" if _is_ats_source(job) else "- Write naturally and specifically — this application goes directly to a human recruiter, not an ATS scanner. Prioritise clarity, personality, and demonstrating genuine understanding of the company's work over keyword matching."}
 """.strip()
 
 
@@ -988,8 +1511,19 @@ def build_resume_prompt(job: dict, config: dict) -> str:
     """
     profile = build_profile_block(config)
     c = config["candidate"]
+    headline = _candidate_headline(c)
+    resume_text = _read_source_file(config, "resume_source")
+    resume_section = ""
+    if resume_text:
+        resume_section = f"""
+BASE RESUME (for content and formatting reference — do NOT copy verbatim, tailor to the job)
+---------------------------------------------------------------------------------------------
+{resume_text}
+
+"""
+
     return f"""
-You are writing an ATS-optimised one-page resume for {c['name']}, a Full-Stack Software Developer in Toronto.
+You are writing a {"ATS-optimised" if _is_ats_source(job) else "human-readable"} one-page resume for {c['name']}, a {headline}.
 
 JOB DETAILS
 -----------
@@ -1000,7 +1534,7 @@ Description: {job['description']}
 CANDIDATE PROFILE
 -----------------
 {profile}
-
+{resume_section}
 INSTRUCTIONS
 ------------
 Write a one-page resume in markdown. Start with EXACTLY this front matter block (copy it verbatim):
@@ -1011,18 +1545,24 @@ Then the resume content in this order:
 1. Name (H1) + title line + contact on one line
 2. ## Summary: 2-3 sentences. Mirror the exact job title and 2-3 key stack terms from the job description verbatim.
 3. ## Skills: Compress to 3 lines. List every skill mentioned in the job description that the candidate has, using the exact spelling/casing from the job description (e.g. if the JD says "Node.js" use "Node.js", not "NodeJS").
-4. ## Experience: 3 roles. 5-6 bullets max per role. Start each bullet with a strong action verb. Bold all metrics.
-5. ## Education: 2 lines only.
+4. ## Experience: 3 roles MAX. 4 bullets per role MAX. Start each bullet with a strong action verb. Bold all metrics. Cut any bullet that does not directly map to the job description.
+5. ## Education: exactly 2 bullet points, one per degree. Format each as: `- **Degree**, School — Year`
 
-ATS Rules (strictly follow these):
+ONE PAGE RULES — strictly enforced:
+- Summary: 2 sentences MAX
+- Skills: 3 lines MAX, comma-separated
+- Each experience role: 4 bullets MAX, each bullet under 20 words
+- Education: 2 bullet points MAX
+- If content exceeds one page, cut the weakest bullets — do NOT shrink font or margins
+
+{"ATS Rules (strictly follow these):" if _is_ats_source(job) else "Formatting Rules (this goes to a human recruiter, not an ATS scanner):"}
 - Use ONLY plain single-column markdown — no tables, no multi-column layouts, no text boxes
-- Use standard section headings (Summary, Skills, Experience, Education) — ATS scanners match on these exact words
-- Mirror keywords and phrases from the job description verbatim — do not paraphrase (e.g. "RESTful APIs" not "REST APIs" if that is what the JD says)
-- Include every required skill and tool mentioned in the job description that the candidate has, even if already listed elsewhere
+{"- Use standard section headings (Summary, Skills, Experience, Education) — ATS scanners match on these exact words" if _is_ats_source(job) else "- Use clear section headings (Summary, Skills, Experience, Education)"}
+{"- Mirror keywords and phrases from the job description verbatim — do not paraphrase (e.g. 'RESTful APIs' not 'REST APIs' if that is what the JD says)" if _is_ats_source(job) else "- Write naturally — prioritise clarity and impact over keyword matching"}
+{"- Include every required skill and tool mentioned in the job description that the candidate has, even if already listed elsewhere" if _is_ats_source(job) else "- Highlight the most relevant skills and achievements for this specific role"}
 - Do not use icons, special characters, or decorative symbols
 - Bold all numbers/metrics: **100,000+**, **99% uptime**, **$250K**, **90%**, **40%**, **50%**, **70%**
-- The whole thing MUST fit on one page
-- Output ONLY the markdown (starting with ---), no preamble, no code fences
+- Output ONLY the markdown (starting with ---), no preamble, no code fences, no explanations about file access or working directories
 """.strip()
 
 
@@ -1038,7 +1578,7 @@ def slugify(text: str, max_len: int = 40) -> str:
 def create_job_folder(run_dir: Path, idx: int, job: dict) -> Path:
     """
     Create the numbered job subfolder inside the day's run directory.
-    Example: claude jobs/2026-03-22/01-CIBC-Full-Stack-NET/
+    Example: 2026-03-22/01-cibc-full-stack-net/
     """
     company_slug = slugify(job["company"])
     title_slug = slugify(job["title"])
@@ -1048,7 +1588,34 @@ def create_job_folder(run_dir: Path, idx: int, job: dict) -> Path:
     return folder
 
 
-def write_readme(folder: Path, job: dict, tier: int, score: float) -> None:
+def _normalise_fit_section(content: str) -> str:
+    """Normalise model output into a compact markdown bullet list for README.md."""
+    stripped = content.strip()
+    stripped = re.sub(r"^```(?:markdown|md)?\s*", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s*```$", "", stripped)
+
+    bullets: list[str] = []
+    for raw_line in stripped.splitlines():
+        line = raw_line.strip()
+        if not line or line == "---":
+            continue
+        if line.startswith("```"):
+            continue
+        if re.match(r"^#{1,6}\s+", line):
+            continue
+        if "Auto-generated" in line and "review" in line:
+            continue
+        line = re.sub(r"^\s*[-*]\s+", "", line)
+        line = re.sub(r"^\s*\d+[.)]\s+", "", line)
+        if line:
+            bullets.append(f"- {line}")
+
+    if not bullets:
+        return README_FIT_PLACEHOLDER
+    return "\n".join(bullets[:5])
+
+
+def write_readme(folder: Path, job: dict, tier: int, score: float, fit_section: str) -> None:
     """Write the README.md for a job application folder."""
     tier_label = {1: "1 — Strongest Match", 2: "2 — Strong Match", 3: "3 — Good Match"}[tier]
     remote_tag = " 🌐 Remote" if job.get("is_remote") else ""
@@ -1065,7 +1632,7 @@ def write_readme(folder: Path, job: dict, tier: int, score: float) -> None:
 {job['url']}
 
 ## Why You're a Strong Fit
-*(Auto-generated — review and customise before applying)*
+{fit_section.strip()}
 
 ## Status
 - [ ] Applied
@@ -1080,14 +1647,34 @@ def write_readme(folder: Path, job: dict, tier: int, score: float) -> None:
 
 
 def _name_slug(name: str) -> str:
-    """Convert a candidate name to a filename-safe slug, e.g. 'Jane Smith' → 'jane-smith'."""
+    """Convert a candidate name to a filename-safe slug."""
     return re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
+
+
+def _strip_preamble(content: str) -> str:
+    """Remove any text before the first '---' front matter or '#' heading."""
+    stripped = content.strip()
+    # Find the first --- block (front matter) and discard anything before it
+    idx = stripped.find("---")
+    if idx > 0:
+        stripped = stripped[idx:]
+    # If no front matter, find the first # heading and discard anything before it
+    elif not stripped.startswith("#"):
+        idx = stripped.find("\n#")
+        if idx >= 0:
+            stripped = stripped[idx:].lstrip()
+    return stripped
 
 
 def write_cover_letter(folder: Path, content: str, candidate_name: str) -> Path:
     """Write <name>-cover-letter.md, prepending the PDF front matter."""
-    # If the generated content already has front matter, don't add it again
-    if content.strip().startswith("---"):
+    content = _strip_preamble(content)
+    # Truncate anything after the bold sign-off (e.g. agent notes, commentary)
+    signoff = f"**{candidate_name}**"
+    idx = content.find(signoff)
+    if idx != -1:
+        content = content[: idx + len(signoff)]
+    if content.startswith("---"):
         full_content = content
     else:
         full_content = PDF_FRONT_MATTER + content
@@ -1099,6 +1686,7 @@ def write_cover_letter(folder: Path, content: str, candidate_name: str) -> Path:
 
 def write_resume(folder: Path, content: str, candidate_name: str) -> Path:
     """Write <name>-resume.md — content should already include front matter from the prompt."""
+    content = _strip_preamble(content)
     slug = _name_slug(candidate_name)
     path = folder / f"{slug}-resume.md"
     path.write_text(content, encoding="utf-8")
@@ -1185,14 +1773,26 @@ def process_job(
     folder = create_job_folder(run_dir, idx, job)
     logger.info(f"Created folder: {folder.name}")
 
+    candidate_name = config["candidate"]["name"]
+    fit_prompt = build_strong_fit_prompt(job, config)
+    fit_text = generate_text(fit_prompt, config, logger)
+    fit_section = README_FIT_PLACEHOLDER
+    if fit_text:
+        fit_section = _normalise_fit_section(fit_text)
+        if fit_section != README_FIT_PLACEHOLDER:
+            logger.info("  ✓ strong-fit summary generated")
+        else:
+            logger.warning("  ✗ strong-fit summary unusable — README placeholder kept")
+    else:
+        logger.warning("  ✗ strong-fit summary generation failed — README placeholder kept")
+
     # README — always written
-    write_readme(folder, job, tier, score)
+    write_readme(folder, job, tier, score, fit_section)
     summary["readme"] = True
     logger.info(f"  ✓ README.md")
 
     # Cover letter
     cl_prompt = build_cover_letter_prompt(job, config)
-    candidate_name = config["candidate"]["name"]
     cl_text = generate_text(cl_prompt, config, logger)
     if cl_text:
         cl_path = write_cover_letter(folder, cl_text, candidate_name)
@@ -1225,7 +1825,7 @@ def process_job(
 def setup_logging(run_date: str) -> logging.Logger:
     """
     Configure logging to both a daily log file and stdout.
-    Log file: claude jobs/logs/YYYY-MM-DD.log
+    Log file: logs/YYYY-MM-DD.log
     """
     LOGS_DIR.mkdir(exist_ok=True)
     log_file = LOGS_DIR / f"{run_date}.log"
@@ -1308,8 +1908,22 @@ def cleanup_old_folders(
         logger.info(f"Cleanup: {len(dated_dirs)} dated folders present — nothing to delete (keep={keep})")
         return
 
+    def _has_applied_job(dated_folder: Path) -> bool:
+        """Return True if any job subfolder in this dated folder has been marked Applied."""
+        for readme in dated_folder.rglob("README.md"):
+            try:
+                content = readme.read_text(encoding="utf-8")
+                if re.search(r"-\s*\[x\]\s*Applied", content, re.IGNORECASE):
+                    return True
+            except Exception:
+                pass
+        return False
+
     logger.info(f"Cleanup: {len(dated_dirs)} dated folders found — keeping newest {keep}, deleting {len(to_delete)}")
     for folder in to_delete:
+        if _has_applied_job(folder):
+            logger.info(f"  Preserved: {folder.name} (contains applied job — not deleted)")
+            continue
         if dry_run:
             logger.info(f"  [DRY RUN] Would delete: {folder.name}")
         else:

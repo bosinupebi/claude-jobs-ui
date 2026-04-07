@@ -4,7 +4,7 @@
     "education": [
       {
         "degree": "Bachelor of Science in Computer Science",
-        "school": "University of Toronto",
+        "school": "Example University",
         "dates": "Sep 2015 – Jun 2019"
       }
     ],
@@ -17,8 +17,8 @@
         "location": "Toronto, ON",
         "bullets": [
           "Built and maintained RESTful APIs serving 100,000+ monthly requests",
-          "Improved test coverage from 40% to 90% using Selenium and Postman",
-          "Led migration to cloud infrastructure reducing operational costs by 30%"
+          "Improved automated test coverage from 40% to 90%",
+          "Led cloud migration work that reduced operational costs by 30%"
         ]
       }
     ],
@@ -39,14 +39,15 @@
       "RESTful APIs",
       "Git"
     ],
-    "summary": "Full-Stack Software Developer with X years of experience building scalable, secure platforms. Specialised in RESTful API development, test automation, and cloud infrastructure.",
-    "title": "Full-Stack Software Developer"
+    "summary": "Software developer with experience building scalable web applications, APIs, and automation workflows. Strong background in modern JavaScript, Python, and cloud-based delivery.",
+    "title": "Software Developer"
   },
   "cleanup": {
     "_comment": "Folder retention policy. Cleanup only triggers once trigger_after_days folders exist, then keeps the newest keep_days and deletes the rest.",
     "keep_days": 2,
     "trigger_after_days": 7
   },
+  "disabled_sources": [],
   "scoring": {
     "_comment_remote": "Remote jobs get +0.5 score bonus — preferred but not required",
     "remote_bonus": 0.5,
@@ -86,11 +87,16 @@
       "android only",
       "ios only"
     ],
+    "locations": [],
     "max_job_age_days": 3,
     "max_results_per_tier": 5
   },
   "sources": {
-    "_comment": "All sources are free and require no API keys",
+    "_comment": "All sources are free; SerpAPI only runs if SERPAPI_KEY is set.",
+    "career_sites": {
+      "_comment": "Company career page URLs. Supports Ashby, Greenhouse, and Lever automatically.",
+      "feeds": []
+    },
     "himalayas": {
       "_comment": "Global remote jobs JSON API. Supports keyword search.",
       "limit": 20,
@@ -100,11 +106,6 @@
         "software engineer"
       ]
     },
-    "career_sites": {
-      "_comment": "Company career page URLs. Supports Ashby, Greenhouse, and Lever automatically.",
-      "urls": []
-    },
-
     "indeed": {
       "_comment": "Indeed RSS — feed URLs are built from these queries + canada_location automatically.",
       "queries": [
@@ -142,12 +143,37 @@
     "remotive": {
       "_comment": "Global remote jobs JSON API. software-dev category. Max 4 req/day.",
       "limit": 100
+    },
+    "serpapi": {
+      "_comment": "Google Jobs via SerpAPI. Only used when SERPAPI_KEY is set.",
+      "queries": [
+        "Software Engineer"
+      ],
+      "serpapi_locations": [
+        "Canada"
+      ]
+    },
+    "themuse": {
+      "_comment": "The Muse public JSON API. queries = categories. limit = pages per category.",
+      "limit": 2,
+      "queries": [
+        "Software Engineer",
+        "Full Stack Engineer",
+        "Backend Engineer"
+      ]
     }
   },
   "tools": {
+    "anthropic_model_fallback": "claude-haiku-4-5-20251001",
     "claude_cli": "claude",
-    "claude_model_fallback": "claude-haiku-4-5-20251001",
-    "md_to_pdf": "md-to-pdf"
-  },
-  "disabled_sources": []
+    "codex_model_fallback": "gpt-5.4-mini",
+    "cover_letter_source": "",
+    "generation_provider_order": [
+      "claude_cli",
+      "anthropic_api",
+      "codex_cli"
+    ],
+    "md_to_pdf": "md-to-pdf",
+    "resume_source": ""
+  }
 }

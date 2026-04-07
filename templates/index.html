@@ -34,6 +34,7 @@
     /* Source card toggle */
     .source-card.disabled-source .card-body { opacity: .45; pointer-events: none; }
     .source-card .card-header { background: #fff; }
+    .generation-provider-row { background: #fff; }
 
     /* Bullet rows */
     .bullet-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -153,7 +154,7 @@
       </div>
     </div><!-- /results tab -->
 
-    <!-- ══════════════════════════════════════════════════════════ PROFILE TAB -->
+    <!-- ═══════════════════════════════════════════════════════ PROFILE TAB -->
     <div class="tab-pane fade" id="tab-profile">
 
       <!-- Contact -->
@@ -210,38 +211,102 @@
           <div id="edu-list"></div>
         </div>
       </div>
+
+      <!-- Documents -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Documents</div>
+        <div class="card-body row g-3">
+          <div class="col-12">
+            <label class="form-label">Cover Letter Source <span class="text-muted small">(PDF used as tone &amp; style reference when generating tailored letters)</span></label>
+            <input id="p-cover-letter-source" class="form-control" placeholder="/path/to/Base Cover Letter.pdf" oninput="markDirty()">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Resume Source <span class="text-muted small">(PDF used as content &amp; formatting reference when generating tailored resumes)</span></label>
+            <input id="p-resume-source" class="form-control" placeholder="/path/to/Base Resume.pdf" oninput="markDirty()">
+          </div>
+        </div>
+      </div>
+
+      <!-- Generation -->
+      <div class="card mb-4">
+        <div class="card-header fw-semibold">Generation</div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            The pipeline tries providers from top to bottom. Claude CLI runs locally first, Anthropic API uses
+            <code>ANTHROPIC_API_KEY</code>, and Codex CLI uses your local Codex login.
+          </p>
+          <div class="mb-4">
+            <label class="form-label">Provider Order</label>
+            <div id="generation-provider-order" class="d-flex flex-column gap-2"></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Anthropic Fallback Model</label>
+              <input id="g-anthropic-model" class="form-control" placeholder="claude-haiku-4-5-20251001" oninput="markDirty()">
+              <div class="form-text">Used when the chain reaches the Anthropic API provider.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Codex Fallback Model</label>
+              <input id="g-codex-model" class="form-control" placeholder="gpt-5.4-mini" oninput="markDirty()">
+              <div class="form-text">Leave blank to use the local Codex CLI default model.</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div><!-- /profile tab -->
 
-    <!-- ══════════════════════════════════════════════════════════ SOURCES TAB -->
+    <!-- ═══════════════════════════════════════════════════════ SOURCES TAB -->
     <div class="tab-pane fade" id="tab-sources">
       <p class="text-muted small mb-3">Toggle sources on/off. Disabled sources are skipped during the daily run. Your queries and URLs are always preserved.</p>
       <div id="sources-list" class="row g-3"></div>
-      <div class="mt-3">
-        <button class="btn btn-outline-primary btn-sm" onclick="openAddSourceModal()">+ Add Source</button>
-      </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════ SEARCH TAB -->
+    <!-- ═══════════════════════════════════════════════════════ SEARCH TAB -->
     <div class="tab-pane fade" id="tab-search">
       <div class="card mb-4">
         <div class="card-header fw-semibold">Search Settings</div>
         <div class="card-body">
           <div class="row g-4">
-            <div class="col-md-6">
-              <label class="form-label">Canadian Location <span class="text-muted small">(strict filter — jobs outside this city/province are dropped)</span></label>
+            <div class="col-md-4">
+              <label class="form-label">Canada Location <span class="text-muted small">(Job Bank &amp; Indeed filter)</span></label>
               <input id="s-location" class="form-control" placeholder="e.g. Toronto, ON" oninput="markDirty()">
             </div>
+            <div class="col-md-8">
+              <label class="form-label">Additional Countries <span class="text-muted small">(included alongside Canada)</span></label>
+              <div class="d-flex gap-4 mt-1">
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-uk" value="United Kingdom" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-uk">United Kingdom</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-us" value="United States" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-us">United States</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-uae" value="UAE" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-uae">UAE</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-ng" value="Nigeria" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-ng">Nigeria</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-za" value="South Africa" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-za">South Africa</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input s-location-cb" type="checkbox" id="loc-jp" value="Japan" onchange="markDirty()">
+                  <label class="form-check-label" for="loc-jp">Japan</label>
+                </div>
+              </div>
+            </div>
             <div class="col-md-3">
-              <label class="form-label">Days Back <span class="text-muted small">(RSS fetch window)</span></label>
+              <label class="form-label">Days Back <span class="text-muted small">(fetch jobs posted within)</span></label>
               <input id="s-days-back" class="form-control" type="number" min="1" max="30" oninput="markDirty()">
             </div>
             <div class="col-md-3">
-              <label class="form-label">Jobs Per Run <span class="text-muted small">(max results)</span></label>
+              <label class="form-label">Jobs Per Run <span class="text-muted small">(max results to process)</span></label>
               <input id="s-max-results" class="form-control" type="number" min="1" max="20" oninput="markDirty()">
-            </div>
-            <div class="col-md-3">
-              <label class="form-label">Max Job Age <span class="text-muted small">(days — drop older postings)</span></label>
-              <input id="s-max-age" class="form-control" type="number" min="1" max="30" oninput="markDirty()">
             </div>
             <div class="col-12">
               <label class="form-label">Exclude Keywords <span class="text-muted small">(skip jobs whose title/description contains these)</span></label>
@@ -252,7 +317,7 @@
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════ SCORING TAB -->
+    <!-- ═══════════════════════════════════════════════════════ SCORING TAB -->
     <div class="tab-pane fade" id="tab-scoring">
       <div class="row g-4 mb-4">
         <div class="col-md-6">
@@ -300,7 +365,7 @@
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════ CLEANUP TAB -->
+    <!-- ═══════════════════════════════════════════════════════ CLEANUP TAB -->
     <div class="tab-pane fade" id="tab-cleanup">
       <div class="card mb-4">
         <div class="card-header fw-semibold">Folder Retention Policy</div>
@@ -328,10 +393,10 @@
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════ SETUP TAB -->
+    <!-- ═══════════════════════════════════════════════════════ SETUP TAB -->
     <div class="tab-pane fade" id="tab-setup">
       <div class="alert alert-info mb-4">
-        This tab shows shell commands to install and manage the daily scheduler (launchd). Run these yourself in Terminal — the UI doesn't touch launchd directly.
+        This tab shows the shell commands to install and manage the daily scheduler (launchd). Run these yourself in Terminal — the UI doesn't touch launchd.
       </div>
       <div id="setup-commands"></div>
     </div>
@@ -351,7 +416,7 @@
         <div class="mb-3">
           <label class="form-label fw-semibold">Pipeline Directory</label>
           <input id="settings-pipeline-dir" class="form-control font-monospace" readonly>
-          <div class="form-text">Read-only. This is where job output folders and config.json live.</div>
+          <div class="form-text">Read-only. This is where job output folders and `config.json` live.</div>
         </div>
         <div class="mb-1">
           <label class="form-label fw-semibold">launchd Service Name <span class="text-muted small">(optional)</span></label>
@@ -363,50 +428,6 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" onclick="saveSettings()">Save</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ══════════════════════════════════════════════════ ADD SOURCE MODAL -->
-<div class="modal fade" id="add-source-modal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h6 class="modal-title">Add Custom Source</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label">Source ID <span class="text-muted small">(unique key, letters/numbers/underscores)</span></label>
-          <input id="new-src-name" class="form-control font-monospace" placeholder="e.g. my_rss_feed">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Type</label>
-          <select id="new-src-type" class="form-select" onchange="updateNewSourceFields()">
-            <option value="rss">RSS Feed</option>
-            <option value="api">JSON API</option>
-            <option value="search_rss">Search-based RSS</option>
-          </select>
-        </div>
-        <div id="new-src-url-group" class="mb-3">
-          <label class="form-label">Feed / API URL</label>
-          <input id="new-src-url" class="form-control" placeholder="https://...">
-        </div>
-        <div id="new-src-limit-group" class="mb-3" style="display:none">
-          <label class="form-label">Fetch Limit</label>
-          <input id="new-src-limit" class="form-control" type="number" min="1" max="500" value="100">
-        </div>
-        <div id="new-src-queries-group" class="mb-3" style="display:none">
-          <label class="form-label">Search Queries</label>
-          <div class="tag-input-wrap" id="new-src-queries-wrap"></div>
-          <div class="form-text">Press Enter or comma to add each query.</div>
-        </div>
-        <div id="add-source-error" class="alert alert-danger mt-2 mb-0 d-none"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-sm btn-primary" onclick="addCustomSource()">Add Source</button>
       </div>
     </div>
   </div>
@@ -460,7 +481,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════════════════════
-let rawConfig = null;
+let rawConfig = null;   // original from server (preserves _comment keys)
 let appMeta   = null;
 let isDirty   = false;
 let _pollInterval = null;
@@ -532,19 +553,16 @@ class TagInput {
 // TAG INPUT INSTANCES
 // ═══════════════════════════════════════════════════════════════════════════════
 const tags = {};
-let newSourceQueryTags = null;
-
 function initTagInputs() {
   tags.skills           = new TagInput('skills-wrap');
   tags.excludeKeywords  = new TagInput('exclude-keywords-wrap');
   tags.tier1Kw          = new TagInput('tier1-kw-wrap');
   tags.tier1Bonus       = new TagInput('tier1-bonus-wrap');
   tags.tier2Kw          = new TagInput('tier2-kw-wrap');
-  newSourceQueryTags    = new TagInput('new-src-queries-wrap');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SOURCE METADATA (built-in sources)
+// SOURCE METADATA
 // ═══════════════════════════════════════════════════════════════════════════════
 const SOURCE_META = {
   jobbank:             { label: 'Job Bank Canada', type: 'RSS', kind: 'queries' },
@@ -556,20 +574,38 @@ const SOURCE_META = {
   jobicy:              { label: 'Jobicy',           type: 'RSS', kind: 'url' },
   indeed:              { label: 'Indeed',           type: 'RSS',  kind: 'queries' },
   career_sites:        { label: 'Career Sites',     type: 'Web',  kind: 'feeds' },
+  themuse:             { label: 'The Muse',         type: 'JSON API', kind: 'queries+limit' },
+  serpapi:             { label: 'Google Jobs (SerpAPI)', type: 'JSON API', kind: 'queries+locations' },
+};
+const DEFAULT_GENERATION_PROVIDER_ORDER = ['claude_cli', 'anthropic_api', 'codex_cli'];
+const GENERATION_PROVIDER_META = {
+  claude_cli: {
+    label: 'Claude CLI',
+    help: 'Local CLI. No API key required.',
+  },
+  anthropic_api: {
+    label: 'Anthropic API',
+    help: 'Requires ANTHROPIC_API_KEY and the fallback model below.',
+  },
+  codex_cli: {
+    label: 'Codex CLI',
+    help: 'Uses your local Codex CLI auth and the fallback model below.',
+  },
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // POPULATE UI
 // ═══════════════════════════════════════════════════════════════════════════════
 function populateAll(cfg) {
-  populateProfile(cfg.candidate);
+  populateProfile(cfg.candidate, cfg.tools || {});
+  populateGeneration(cfg.tools || {});
   populateSources(cfg.sources, cfg.disabled_sources || []);
   populateSearch(cfg.search);
   populateScoring(cfg.scoring);
   populateCleanup(cfg.cleanup);
 }
 
-function populateProfile(c) {
+function populateProfile(c, tools) {
   document.getElementById('p-name').value     = c.name     || '';
   document.getElementById('p-title').value    = c.title    || '';
   document.getElementById('p-email').value    = c.email    || '';
@@ -578,9 +614,75 @@ function populateProfile(c) {
   document.getElementById('p-linkedin').value = c.linkedin || '';
   document.getElementById('p-github').value   = c.github   || '';
   document.getElementById('p-summary').value  = c.summary  || '';
+  document.getElementById('p-cover-letter-source').value = (tools && tools.cover_letter_source) || '';
+  document.getElementById('p-resume-source').value        = (tools && tools.resume_source)        || '';
   tags.skills.setValues(c.skills || []);
   renderExperience(c.experience || []);
   renderEducation(c.education   || []);
+}
+
+function normaliseGenerationProviderOrder(order) {
+  const configured = Array.isArray(order) ? order : [];
+  const seen = new Set();
+  const out = [];
+
+  configured.forEach(provider => {
+    if (GENERATION_PROVIDER_META[provider] && !seen.has(provider)) {
+      out.push(provider);
+      seen.add(provider);
+    }
+  });
+  DEFAULT_GENERATION_PROVIDER_ORDER.forEach(provider => {
+    if (!seen.has(provider)) {
+      out.push(provider);
+      seen.add(provider);
+    }
+  });
+  return out;
+}
+
+function generationProviderRowHTML(provider, index, total) {
+  const meta = GENERATION_PROVIDER_META[provider];
+  return `
+    <div class="border rounded p-3 d-flex justify-content-between align-items-start generation-provider-row" data-provider="${provider}">
+      <div>
+        <div class="fw-semibold">${esc(meta.label)}</div>
+        <div class="text-muted small">${esc(meta.help)}</div>
+      </div>
+      <div class="btn-group btn-group-sm" role="group" aria-label="Move provider">
+        <button class="btn btn-outline-secondary" type="button" onclick="moveGenerationProvider('${provider}', -1)" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button class="btn btn-outline-secondary" type="button" onclick="moveGenerationProvider('${provider}', 1)" ${index === total - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+    </div>`;
+}
+
+function renderGenerationProviderOrder(order) {
+  const container = document.getElementById('generation-provider-order');
+  container.innerHTML = order.map((provider, index) =>
+    generationProviderRowHTML(provider, index, order.length)
+  ).join('');
+}
+
+function collectGenerationProviderOrder() {
+  return [...document.querySelectorAll('#generation-provider-order .generation-provider-row')]
+    .map(row => row.dataset.provider);
+}
+
+function moveGenerationProvider(provider, direction) {
+  const order = collectGenerationProviderOrder();
+  const index = order.indexOf(provider);
+  const nextIndex = index + direction;
+  if (index === -1 || nextIndex < 0 || nextIndex >= order.length) return;
+  [order[index], order[nextIndex]] = [order[nextIndex], order[index]];
+  renderGenerationProviderOrder(order);
+  markDirty();
+}
+
+function populateGeneration(tools) {
+  renderGenerationProviderOrder(normaliseGenerationProviderOrder(tools.generation_provider_order));
+  document.getElementById('g-anthropic-model').value =
+    tools.anthropic_model_fallback || tools.claude_model_fallback || '';
+  document.getElementById('g-codex-model').value = tools.codex_model_fallback || '';
 }
 
 // ── Experience ──────────────────────────────────────────────────────────────
@@ -636,6 +738,8 @@ function bulletRowHTML(text) {
 
 function addBullet(btn) {
   const list = btn.closest('.accordion-body').querySelector('.bullets-list');
+  const row = document.createElement('div');
+  row.outerHTML; // dummy
   list.insertAdjacentHTML('beforeend', bulletRowHTML(''));
   const newRow = list.lastElementChild;
   initBulletDrag(list);
@@ -655,6 +759,7 @@ function addExperience() {
   const i = acc.children.length;
   const card = buildExpCard({ title:'', company:'', dates:'', location:'', bullets:[] }, i);
   acc.appendChild(card);
+  // Collapse all, expand new
   acc.querySelectorAll('.accordion-collapse.show').forEach(el => {
     bootstrap.Collapse.getOrCreateInstance(el).hide();
   });
@@ -669,6 +774,7 @@ function removeExpCard(btn) {
   confirmRemove(`Remove "${label}"?`, () => { card.remove(); markDirty(); });
 }
 
+// Drag to reorder bullets
 function initBulletDrag(list) {
   let dragging = null;
   list.querySelectorAll('.bullet-row').forEach(row => {
@@ -754,59 +860,12 @@ function populateSources(sources, disabledList) {
       </div>`;
     container.appendChild(col);
 
-    if (meta.kind === 'queries' || meta.kind === 'queries+limit') {
+    // Init tag inputs for sources that have queries
+    if (meta.kind === 'queries' || meta.kind === 'queries+limit' || meta.kind === 'queries+locations') {
       tags[`src_${key}_queries`] = new TagInput(`src-${key}-queries-wrap`);
       tags[`src_${key}_queries`].setValues(src.queries || []);
     }
   });
-
-  Object.entries(sources).forEach(([key, src]) => {
-    if (!src || !src.custom) return;
-    container.appendChild(buildCustomSourceCard(key, src, disabled));
-  });
-}
-
-function buildCustomSourceCard(key, src, disabled) {
-  const isDisabled = disabled.has(key);
-  const toggleId = `src-toggle-${key}`;
-  const cardId = `src-card-${key}`;
-  const typeMap   = { rss: 'RSS', api: 'JSON API', search_rss: 'Search RSS' };
-  const colorMap  = { rss: 'primary', api: 'success', search_rss: 'primary' };
-  const typeLabel = typeMap[src.type] || src.type || 'Custom';
-  const typeColor = colorMap[src.type] || 'secondary';
-
-  let bodyHtml = '';
-  if (src.url)   bodyHtml += `<div class="text-muted small mb-1"><span class="fw-semibold">URL:</span> ${esc(src.url)}</div>`;
-  if (Array.isArray(src.queries) && src.queries.length)
-    bodyHtml += `<div class="text-muted small mb-1"><span class="fw-semibold">Queries:</span> ${src.queries.map(esc).join(', ')}</div>`;
-  if (src.limit != null)
-    bodyHtml += `<div class="text-muted small"><span class="fw-semibold">Limit:</span> ${esc(String(src.limit))}</div>`;
-  if (!bodyHtml) bodyHtml = '<span class="text-muted small">No details configured.</span>';
-
-  const col = document.createElement('div');
-  col.className = 'col-12';
-  col.id = `src-col-${key}`;
-  col.innerHTML = `
-    <div class="card source-card ${isDisabled ? 'disabled-source' : ''}" id="${cardId}" data-source="${key}">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-2">
-          <strong>${esc(key)}</strong>
-          <span class="badge bg-${typeColor}">${typeLabel}</span>
-          <span class="badge bg-secondary">Custom</span>
-        </div>
-        <div class="d-flex align-items-center gap-3">
-          <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" role="switch" id="${toggleId}"
-              ${isDisabled ? '' : 'checked'}
-              onchange="toggleSource('${key}', this.checked)">
-            <label class="form-check-label small" for="${toggleId}">${isDisabled ? 'Disabled' : 'Enabled'}</label>
-          </div>
-          <button class="btn btn-sm btn-outline-danger" title="Delete source" onclick="deleteCustomSource('${key}')">&#128465;</button>
-        </div>
-      </div>
-      <div class="card-body">${bodyHtml}</div>
-    </div>`;
-  return col;
 }
 
 function buildSourceBody(key, kind, src) {
@@ -844,6 +903,20 @@ function buildSourceBody(key, kind, src) {
       </div>
     </div>`;
   }
+  if (kind === 'queries+locations') {
+    const locsHTML = (src.serpapi_locations || []).map((l, i) => locationRowHTML(key, l, i)).join('');
+    return `<div class="row g-3">
+      <div class="col-md-6">
+        <label class="form-label small">Search Queries</label>
+        <div class="tag-input-wrap" id="src-${key}-queries-wrap"></div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small">Locations <span class="text-muted">(one per line)</span></label>
+        <div id="src-${key}-locations">${locsHTML}</div>
+        <button class="btn btn-sm btn-outline-secondary mt-2" onclick="addLocation('${key}')">+ Add Location</button>
+      </div>
+    </div>`;
+  }
   return '';
 }
 
@@ -852,6 +925,25 @@ function feedRowHTML(key, url, i) {
     <input class="form-control form-control-sm" value="${esc(url)}" oninput="markDirty()">
     <button class="btn btn-sm btn-outline-danger" onclick="removeFeed(this)">×</button>
   </div>`;
+}
+
+function locationRowHTML(key, loc, i) {
+  return `<div class="d-flex gap-2 mb-2 location-row" data-loc-index="${i}">
+    <input class="form-control form-control-sm" value="${esc(loc)}" oninput="markDirty()">
+    <button class="btn btn-sm btn-outline-danger" onclick="removeLocation(this)">×</button>
+  </div>`;
+}
+
+function addLocation(key) {
+  const container = document.getElementById(`src-${key}-locations`);
+  const i = container.children.length;
+  container.insertAdjacentHTML('beforeend', locationRowHTML(key, '', i));
+  markDirty();
+}
+
+function removeLocation(btn) {
+  btn.closest('.location-row').remove();
+  markDirty();
 }
 
 function addFeed(key) {
@@ -879,87 +971,23 @@ function toggleSource(key, enabled) {
   markDirty();
 }
 
-function openAddSourceModal() {
-  document.getElementById('new-src-name').value = '';
-  document.getElementById('new-src-type').value = 'rss';
-  document.getElementById('new-src-url').value  = '';
-  document.getElementById('new-src-limit').value = '100';
-  newSourceQueryTags.setValues([]);
-  document.getElementById('add-source-error').classList.add('d-none');
-  updateNewSourceFields();
-  bootstrap.Modal.getOrCreateInstance(document.getElementById('add-source-modal')).show();
-}
-
-function updateNewSourceFields() {
-  const type = document.getElementById('new-src-type').value;
-  document.getElementById('new-src-url-group').style.display     = (type === 'rss' || type === 'api') ? '' : 'none';
-  document.getElementById('new-src-limit-group').style.display   = (type === 'api') ? '' : 'none';
-  document.getElementById('new-src-queries-group').style.display = (type === 'search_rss') ? '' : 'none';
-}
-
-function addCustomSource() {
-  const errEl = document.getElementById('add-source-error');
-  errEl.classList.add('d-none');
-
-  const rawName = document.getElementById('new-src-name').value.trim();
-  const key = rawName.replace(/[^a-z0-9_]/gi, '_').toLowerCase();
-  if (!key) {
-    errEl.textContent = 'Source ID is required.';
-    errEl.classList.remove('d-none');
-    return;
-  }
-  if (rawConfig.sources && rawConfig.sources[key]) {
-    errEl.textContent = `A source with ID "${key}" already exists.`;
-    errEl.classList.remove('d-none');
-    return;
-  }
-
-  const type   = document.getElementById('new-src-type').value;
-  const newSrc = { custom: true, type };
-
-  if (type === 'rss') {
-    newSrc.url = document.getElementById('new-src-url').value.trim();
-    if (!newSrc.url) { errEl.textContent = 'Feed URL is required.'; errEl.classList.remove('d-none'); return; }
-  } else if (type === 'api') {
-    newSrc.url   = document.getElementById('new-src-url').value.trim();
-    newSrc.limit = parseInt(document.getElementById('new-src-limit').value) || 100;
-    if (!newSrc.url) { errEl.textContent = 'API URL is required.'; errEl.classList.remove('d-none'); return; }
-  } else if (type === 'search_rss') {
-    newSrc.queries = newSourceQueryTags.getValues();
-    if (!newSrc.queries.length) { errEl.textContent = 'Add at least one search query.'; errEl.classList.remove('d-none'); return; }
-  }
-
-  if (!rawConfig.sources) rawConfig.sources = {};
-  rawConfig.sources[key] = newSrc;
-
-  bootstrap.Modal.getInstance(document.getElementById('add-source-modal')).hide();
-  populateSources(rawConfig.sources, rawConfig.disabled_sources || []);
-  markDirty();
-}
-
-function deleteCustomSource(key) {
-  confirmRemove(`Remove custom source "${key}"?`, () => {
-    if (rawConfig.sources) delete rawConfig.sources[key];
-    const col = document.getElementById(`src-col-${key}`);
-    if (col) col.remove();
-    markDirty();
-  });
-}
-
 // ── Search ───────────────────────────────────────────────────────────────────
 function populateSearch(s) {
-  document.getElementById('s-location').value    = s.canada_location      || '';
-  document.getElementById('s-days-back').value   = s.days_back            || 1;
-  document.getElementById('s-max-results').value = s.max_results_per_tier || 5;
-  document.getElementById('s-max-age').value     = s.max_job_age_days     || 3;
+  document.getElementById('s-location').value = s.canada_location || '';
+  const locs = s.locations || [];
+  document.querySelectorAll('.s-location-cb').forEach(cb => {
+    cb.checked = locs.includes(cb.value);
+  });
+  document.getElementById('s-days-back').value   = s.max_job_age_days    || s.days_back || 1;
+  document.getElementById('s-max-results').value = s.max_results_per_tier|| 5;
   tags.excludeKeywords.setValues(s.exclude_keywords || []);
 }
 
 // ── Scoring ──────────────────────────────────────────────────────────────────
 function populateScoring(sc) {
-  tags.tier1Kw.setValues(sc.tier1_keywords         || []);
+  tags.tier1Kw.setValues(sc.tier1_keywords       || []);
   tags.tier1Bonus.setValues(sc.tier1_bonus_keywords || []);
-  tags.tier2Kw.setValues(sc.tier2_keywords          || []);
+  tags.tier2Kw.setValues(sc.tier2_keywords       || []);
   document.getElementById('tier1-threshold').value = sc.tier1_threshold || 2;
   document.getElementById('tier2-threshold').value = sc.tier2_threshold || 2;
   const rb = sc.remote_bonus != null ? sc.remote_bonus : 0.5;
@@ -992,7 +1020,7 @@ function populateSetup(meta) {
   const pipelineDir  = meta.pipeline_dir;
   const plistPath    = meta.plist_path;
   const launchAgents = meta.launch_agents_dir;
-  const plistName    = meta.plist_name;
+  const plistName    = meta.plist_name || 'com.example.jobsearch.plist';
   const plistDest    = `"${launchAgents}/${plistName}"`;
   const serviceId    = plistName.replace('.plist', '');
 
@@ -1006,12 +1034,20 @@ function populateSetup(meta) {
       code: `cp "${plistPath}" "${launchAgents}/"\nlaunchctl load "${launchAgents}/${plistName}"`,
     },
     {
-      title: '3. Uninstall the scheduler',
-      code: `launchctl unload ${plistDest}\nrm ${plistDest}`,
+      title: '3. Run the job search manually right now',
+      code: `cd "${pipelineDir}" && python3 job_search_daily.py`,
     },
     {
-      title: "4. View today's log",
+      title: '4. Dry run (preview only — no files created)',
+      code: `cd "${pipelineDir}" && python3 job_search_daily.py --dry-run`,
+    },
+    {
+      title: "5. View today's log",
       code: `cat "${pipelineDir}/logs/$(date +%Y-%m-%d).log"`,
+    },
+    {
+      title: '6. Uninstall the scheduler',
+      code: `launchctl unload ${plistDest}\nrm ${plistDest}`,
     },
   ];
 
@@ -1062,10 +1098,12 @@ async function saveSettings() {
     if (data.ok) {
       bootstrap.Modal.getInstance(document.getElementById('settings-modal')).hide();
       showToast('Settings saved.', 'success');
-      // refresh meta so setup tab updates
       const cfgRes = await fetch('/api/config');
       const cfgData = await cfgRes.json();
-      if (cfgData.meta) { appMeta = cfgData.meta; populateSetup(appMeta); }
+      if (cfgData.meta) {
+        appMeta = cfgData.meta;
+        populateSetup(appMeta);
+      }
     } else {
       errEl.textContent = data.error || 'Failed to save.';
       errEl.classList.remove('d-none');
@@ -1137,14 +1175,14 @@ async function pollRunStatus() {
       setRunUI(false);
       if (data.exit_code === 0) {
         setRunDot('success');
-        loadResults(); // refresh results tab
+        loadResults();
       } else if (data.exit_code !== null) {
         setRunDot('failed');
         showToast(`Run failed with exit code ${data.exit_code}.`, 'danger');
       }
     }
   } catch (err) {
-    // network hiccup — keep polling
+    // Keep polling through transient errors.
   }
 }
 
@@ -1224,7 +1262,6 @@ async function viewReadme(date, slug, title, url) {
 }
 
 function renderMarkdown(md) {
-  // Minimal markdown renderer: headings, bold, hr, links, paragraphs
   return md
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/^### (.+)$/gm, '<h3>$1</h3>')
@@ -1243,8 +1280,10 @@ function renderMarkdown(md) {
 // COLLECT (UI → data)
 // ═══════════════════════════════════════════════════════════════════════════════
 function collectAll() {
+  // Deep clone raw to preserve _comment keys
   const out = JSON.parse(JSON.stringify(rawConfig));
 
+  // Candidate
   out.candidate.name     = document.getElementById('p-name').value;
   out.candidate.title    = document.getElementById('p-title').value;
   out.candidate.email    = document.getElementById('p-email').value;
@@ -1257,6 +1296,16 @@ function collectAll() {
   out.candidate.experience = collectExperience();
   out.candidate.education  = collectEducation();
 
+  // Tools — source documents
+  if (!out.tools) out.tools = {};
+  out.tools.cover_letter_source = document.getElementById('p-cover-letter-source').value;
+  out.tools.resume_source        = document.getElementById('p-resume-source').value;
+  out.tools.generation_provider_order = collectGenerationProviderOrder();
+  out.tools.anthropic_model_fallback = document.getElementById('g-anthropic-model').value.trim();
+  out.tools.codex_model_fallback = document.getElementById('g-codex-model').value.trim();
+  delete out.tools.claude_model_fallback;
+
+  // Sources
   const disabledSources = [];
   Object.keys(SOURCE_META).forEach(key => {
     const toggle = document.getElementById(`src-toggle-${key}`);
@@ -1285,24 +1334,23 @@ function collectAll() {
       const el = document.getElementById(`src-${key}-limit`);
       if (el) src.limit = parseInt(el.value) || src.limit;
     }
+    if (meta.kind === 'queries+locations') {
+      if (tags[`src_${key}_queries`]) src.queries = tags[`src_${key}_queries`].getValues();
+      const container = document.getElementById(`src-${key}-locations`);
+      if (container) src.serpapi_locations = [...container.querySelectorAll('.location-row input')].map(i => i.value).filter(Boolean);
+    }
     out.sources[key] = src;
   });
-
-  Object.keys(out.sources).forEach(key => {
-    if (out.sources[key] && out.sources[key].custom) {
-      const toggle = document.getElementById(`src-toggle-${key}`);
-      if (toggle && !toggle.checked) disabledSources.push(key);
-    }
-  });
-
   out.disabled_sources = disabledSources;
 
+  // Search
   out.search.canada_location      = document.getElementById('s-location').value;
-  out.search.days_back            = parseInt(document.getElementById('s-days-back').value) || 1;
+  out.search.locations            = [...document.querySelectorAll('.s-location-cb:checked')].map(cb => cb.value);
+  out.search.max_job_age_days     = parseInt(document.getElementById('s-days-back').value) || 1;
   out.search.max_results_per_tier = parseInt(document.getElementById('s-max-results').value) || 5;
-  out.search.max_job_age_days     = parseInt(document.getElementById('s-max-age').value) || 3;
   out.search.exclude_keywords     = tags.excludeKeywords.getValues();
 
+  // Scoring
   out.scoring.tier1_keywords       = tags.tier1Kw.getValues();
   out.scoring.tier1_bonus_keywords = tags.tier1Bonus.getValues();
   out.scoring.tier2_keywords       = tags.tier2Kw.getValues();
@@ -1310,6 +1358,7 @@ function collectAll() {
   out.scoring.tier2_threshold      = parseInt(document.getElementById('tier2-threshold').value) || 2;
   out.scoring.remote_bonus         = parseFloat(document.getElementById('remote-bonus').value) || 0.5;
 
+  // Cleanup
   out.cleanup.trigger_after_days = parseInt(document.getElementById('cleanup-trigger').value) || 7;
   out.cleanup.keep_days          = parseInt(document.getElementById('cleanup-keep').value) || 2;
 
@@ -1397,20 +1446,19 @@ async function init() {
 
   try {
     const res  = await fetch('/api/config');
-    const data = await res.json();
-
     if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
       document.querySelector('.container-lg').innerHTML = `
-        <div class="alert alert-danger mt-4">
-          <h5>Cannot load configuration</h5>
-          <p>${esc(data.error || 'Server error ' + res.status)}</p>
-          <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Retry</button>
-        </div>`;
+      <div class="alert alert-danger mt-4">
+        <h5>Cannot load configuration</h5>
+        <p>${esc(data.error || 'Server error ' + res.status)}</p>
+        <button class="btn btn-sm btn-outline-danger" onclick="location.reload()">Retry</button>
+      </div>`;
       return;
     }
-
-    rawConfig = data.config;
-    appMeta   = data.meta;
+    const data = await res.json();
+    rawConfig  = data.config;
+    appMeta    = data.meta;
     populateAll(rawConfig);
     populateSetup(appMeta);
   } catch (err) {
@@ -1422,17 +1470,18 @@ async function init() {
     return;
   }
 
-  // Load results and poll for any in-progress run
   loadResults();
   pollRunStatus();
 }
 
 document.addEventListener('DOMContentLoaded', init);
 
+// Warn on unload if dirty
 window.addEventListener('beforeunload', e => {
   if (isDirty) { e.preventDefault(); e.returnValue = ''; }
 });
 
+// Sync cleanup labels on input
 document.getElementById('cleanup-trigger').addEventListener('input', updateCleanupLabels);
 document.getElementById('cleanup-keep').addEventListener('input', updateCleanupLabels);
 </script>

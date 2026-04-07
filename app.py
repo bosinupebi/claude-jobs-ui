@@ -28,10 +28,22 @@ PLIST_NAME_DEFAULT = "com.example.jobsearch.plist"
 REQUIRED_KEYS = {"candidate", "search", "sources", "scoring", "cleanup", "tools"}
 
 app = Flask(__name__)
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # ── Run state ─────────────────────────────────────────────────────────────────
 _run_state = {"running": False, "pid": None, "exit_code": None}
 _run_lock = threading.Lock()
+
+
+def _read_recent_log(max_lines: int) -> tuple[str, bool]:
+    """Return the last `max_lines` lines from today's log file."""
+    today = date.today().isoformat()
+    log_file = LOGS_DIR / f"{today}.log"
+    if not log_file.exists():
+        return "", False
+
+    lines = log_file.read_text(encoding="utf-8").splitlines()
+    return "\n".join(lines[-max_lines:]), True
 
 
 # ── Settings helpers ──────────────────────────────────────────────────────────
@@ -155,16 +167,20 @@ def run_status():
     with _run_lock:
         state = dict(_run_state)
 
-    today = date.today().isoformat()
-    log_file = LOGS_DIR / f"{today}.log"
-    log_text = ""
-    if log_file.exists():
-        lines = log_file.read_text(encoding="utf-8").splitlines()
-        log_text = "\n".join(lines[-60:])
+    log_text, _ = _read_recent_log(60)
 
     return jsonify({
         "running": state["running"],
         "exit_code": state["exit_code"],
+        "log": log_text,
+    })
+
+
+@app.route("/api/status")
+def status():
+    log_text, exists = _read_recent_log(25)
+    return jsonify({
+        "exists": exists,
         "log": log_text,
     })
 
