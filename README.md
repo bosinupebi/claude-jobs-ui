@@ -1,191 +1,122 @@
 # claude-jobs-ui
 
-A local web UI for configuring a job search pipeline without editing JSON by hand. Built with Python (Flask) and Bootstrap 5 — no build step, no cloud accounts, no installation beyond one `pip install`.
+`claude-jobs-ui` is a self-contained Flask app plus job-search pipeline. It gives you a browser UI for editing `config.json`, running the pipeline manually, reviewing generated job folders, and copying launchd commands without hand-editing JSON or wiring the app to an external scripts directory.
 
----
+## What This Repo Does
 
-## What it does
+The repo bundles both the UI and the pipeline in one place:
 
-The daily job search pipeline is entirely headless — it runs via a macOS launchd scheduler and generates tailored cover letters and resumes using Claude. This UI lets you tweak every configuration option through a browser form instead of editing `config.json` directly.
+- `app.py` serves the web UI and persists config changes
+- `job_search_daily.py` fetches jobs, scores them, generates application materials, and writes dated output folders
+- `config.json` holds the editable candidate, source, search, scoring, cleanup, and tool settings
 
-| Tab | What you can configure |
-|-----|------------------------|
-| **Profile** | Your name, contact info, summary, skills, work experience (with bullet reordering), and education |
-| **Sources** | Enable or disable any job board source; edit search queries, feed URLs, and fetch limits; add your own custom sources |
-| **Search** | How many jobs to process per run, how many days back to look, and keywords to exclude |
-| **Scoring** | Tier 1 / Tier 2 keyword lists and thresholds, remote job score bonus |
-| **Cleanup** | How many dated output folders to keep and when to start trimming them |
-| **Setup** | Copy-paste shell commands to install, start, check, and remove the launchd scheduler |
+The UI includes these tabs:
 
-Changes are saved immediately to the pipeline's `config.json` with a `.json.bak` backup created automatically on every save.
+- `Run` for manual runs and live log polling
+- `Results` for browsing generated jobs and README details
+- `Profile` for contact info, experience, education, source documents, and text-generation settings
+- `Sources` for toggling/editing built-in job sources
+- `Search` for location, age, and filtering controls
+- `Scoring` for keyword tiers and remote bonus
+- `Cleanup` for dated-folder retention rules
+- `Setup` for copy-paste launchd commands
 
----
+## Pipeline Highlights
+
+The pipeline now supports:
+
+- Source toggles via `disabled_sources`
+- New built-in sources: `career_sites`, `themuse`, and `serpapi`
+- Generation provider chaining with `claude_cli`, `anthropic_api`, and `codex_cli`
+- Optional source-document ingestion for cover-letter and resume generation
+- Auto-generated README strong-fit bullets
+- ATS-aware versus direct-human prompt behavior depending on source
+- Relative posted-date parsing like `today`, `yesterday`, and `3 days ago`
+- Cleanup protection for dated folders containing jobs already marked applied
 
 ## Requirements
 
-| Dependency | Version | Notes |
-|------------|---------|-------|
-| Python 3 | 3.8+ | Ships with macOS |
-| Flask | latest | Installed automatically by `start.sh` |
-| Internet (CDN) | — | Bootstrap 5 is loaded from CDN |
+- Python 3.8+
+- `pip3 install -r requirements.txt`
+- `md-to-pdf` installed globally if you want PDF generation
 
-The pipeline itself (`job_search_daily.py`) requires additional dependencies — see its own `README.md`.
+Optional integrations:
 
----
+- `ANTHROPIC_API_KEY` for Anthropic API fallback
+- `SERPAPI_KEY` for Google Jobs via SerpAPI
+- local `claude` CLI and/or `codex` CLI if you want CLI-first generation
 
-## Getting started
+## Getting Started
 
 ```bash
-# 1. Clone or download this repo
-git clone https://github.com/bosinupebi/claude-jobs-ui.git
-cd claude-jobs-ui
-
-# 2. Start the server
+pip3 install -r requirements.txt
 bash start.sh
 ```
 
-`start.sh` will:
-1. Check that Python 3 is available
-2. Install Flask if it isn't already (`pip3 install flask`)
-3. Start the Flask server on `http://localhost:5050` (falls back to `:5051`)
-4. Open your browser automatically after 1.5 seconds
+The app starts on `http://localhost:5050` by default.
 
-**First run:** The UI loads immediately — no setup required. Edit `config.json` in the repo folder with your own details before starting if you want to pre-populate the form.
+## Key Config Fields
 
-Press **Ctrl+C** in the Terminal to stop the server.
+Important newer config fields include:
 
----
+- `tools.generation_provider_order`
+- `tools.anthropic_model_fallback`
+- `tools.codex_model_fallback`
+- `tools.cover_letter_source`
+- `tools.resume_source`
+- `search.locations`
+- `sources.career_sites.feeds`
+- `sources.themuse`
+- `sources.serpapi`
+- `disabled_sources`
 
-## Usage guide
+Saves are atomic and also create `config.json.bak`.
 
-### Saving changes
+## Built-In Sources
 
-Every change you make marks the page as "unsaved" — a yellow banner appears at the top. Click **Save All Changes** (top-right) to write the changes to `config.json`. A green toast confirms success.
+This repo ships with editable support for:
 
-> A backup is written to `config.json.bak` on every save. To roll back, copy the backup over the original:
-> ```bash
-> cp /path/to/config.json.bak /path/to/config.json
-> ```
+- `jobbank`
+- `remotive`
+- `remoteok`
+- `himalayas`
+- `realworkfromanywhere`
+- `jobicy`
+- `indeed`
+- `career_sites`
+- `themuse`
+- `serpapi`
 
-### Profile tab
+`serpapi` only runs when `SERPAPI_KEY` is present.
 
-- **Skills** — Type a skill and press **Enter** or **comma** to add it as a tag. Click **×** to remove one. **Backspace** on an empty input removes the last tag.
-- **Experience bullets** — Drag the ⠿ handle to reorder bullets. Click **×** to remove one, **+ Add Bullet** to append a new one.
-- **Adding a role** — Click **+ Add Role** in the Experience card header.
-- **Removing a role** — Expand the role and click **Remove Role** (confirmation required).
+## Generation Behavior
 
-### Sources tab
+The default text-generation chain is:
 
-Each of the built-in job board sources has a toggle switch in its card header. Disabling a source skips it during the next run — your queries and URLs are never deleted.
+1. `claude_cli`
+2. `anthropic_api`
+3. `codex_cli`
 
-| Source | Type | Notes |
-|--------|------|-------|
-| Job Bank Canada | RSS | Canadian gov't board — strictly filtered to `canada_location` |
-| Remotive | JSON API | Global remote — max ~4 req/day |
-| We Work Remotely | RSS | Curated remote — full-stack + back-end |
-| RemoteOK | RSS | Broad global remote |
-| Himalayas | JSON API | Global remote — multi-query search |
-| Real Work From Anywhere | RSS | Category remote feeds |
-| Jobicy | RSS | Dev jobs incl. hybrid and onsite |
-| Indeed | RSS | Add one URL per search (e.g. `https://www.indeed.com/rss?q=software+developer&l=Toronto`) |
+You can reorder that chain in the UI. The pipeline tries providers in order and stops on the first successful result.
 
-**Adding a custom source** — Click **+ Add Source** at the bottom of the sources list. Choose a type (RSS Feed, JSON API, or Search-based RSS), enter the details, and click **Add Source**. Custom sources appear with a **Custom** badge and a trash icon to delete them.
-
-### Scoring tab
-
-Jobs are tiered by how well they match your keywords:
-
-- **Tier 1** — Must have ≥ N of your Tier 1 keywords. Bonus keywords add to the score without counting toward the threshold.
-- **Tier 2** — Must have ≥ N of your Tier 2 keywords (fallback tier).
-- **Tier 3** — Everything else.
-
-The **Remote Bonus** slider adds a fixed score increment to any job flagged as remote.
-
-### Cleanup tab
-
-The pipeline stores output in dated folders. The cleanup policy:
-
-- Cleanup only runs once **Trigger After** folders exist (prevents early deletion during the first week)
-- When triggered, it keeps the **Keep** most recent folders and permanently deletes the rest
-- Logs, `seen_jobs.json`, scripts, and config files are never touched
-
-### Setup tab
-
-The Setup tab shows ready-to-run Terminal commands for managing the launchd scheduler. Each command has a **Copy** button. The UI never modifies launchd — you run the commands yourself.
-
----
-
-## File structure
-
-```
-claude-jobs-ui/
-├── app.py              Flask server — reads and writes config.json
-├── requirements.txt    Python dependencies (flask only)
-├── start.sh            Launch script — installs Flask, starts server, opens browser
-├── README.md           This file
-├── .gitignore          Excludes secrets, settings, macOS junk, and build artefacts
-├── tests/
-│   └── test_app.py     Pytest test suite for the Flask backend
-└── templates/
-    └── index.html      Single-page Bootstrap 5 app (all tabs + JS inline)
-```
-
-`settings.json` is created on first run and is gitignored — it stores your launchd service name preference.
-
----
-
-## Running tests
+## Running Tests
 
 ```bash
-cd ~/Desktop/claude-jobs-ui
-pip3 install pytest flask
-pytest tests/ -v
+pip3 install pytest
+PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider tests/test_app.py -q
 ```
 
-The test suite covers:
-- `GET /api/settings` — returns settings, defaults when no settings file exists
-- `POST /api/settings` — saves settings, validates required fields
-- `GET /api/config` — returns `setup_required` when unconfigured, returns config + meta otherwise, handles missing config file (503)
-- `POST /api/config` — saves config, creates backup, validates required keys, atomic write, preserves `_comment` keys, writes `disabled_sources`, returns 503 when unconfigured
-- `GET /api/status` — returns log tail, handles missing log file, handles unconfigured state
-- `GET /` — serves the HTML page
+## Repo Layout
 
----
-
-## Architecture notes
-
-### Config proxy pattern
-
-`app.py` is a thin proxy — it reads `config.json` on every `GET /api/config` request and writes it on every `POST /api/config`. It holds no in-memory state between requests. This means:
-
-- Multiple browser tabs won't conflict (last save wins)
-- Restarting the server loses nothing
-- You can still edit `config.json` by hand while the server is running (refresh the page to pick up changes)
-
-### Atomic writes
-
-`POST /api/config` writes to `config.json.tmp` first, then renames it over `config.json`. On POSIX filesystems (macOS included), rename is atomic — if the process is killed mid-write, the original config is untouched.
-
-### `settings.json`
-
-Stores the launchd service name preference. Created on first save. Gitignored — never committed to the repo.
-
-### `disabled_sources` key
-
-The pipeline's `fetch_all_jobs()` function reads `config["disabled_sources"]` (a list of source key strings) and skips those fetchers. The Sources tab toggle writes this list. If the key is absent the pipeline behaves as before (all sources enabled).
-
-### `_comment` key preservation
-
-The config file may contain `_comment` and similar keys for human readability. The UI deep-clones the originally-loaded config before collecting form values, so any keys it doesn't know about survive every save.
-
----
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| Browser doesn't open | Navigate manually to `http://localhost:5050` |
-| Port already in use | `start.sh` falls back to `:5051` automatically |
-| "config.json not found" error | `config.json` is missing from the repo folder — restore it from `config.json.bak` or re-clone |
-| Flask not found | Run `pip3 install flask` manually, then re-run `start.sh` |
-| Save fails with "Missing required keys" | The config is missing a top-level section — restore from `config.json.bak` |
+```text
+claude-jobs-ui/
+├── app.py
+├── config.json
+├── job_search_daily.py
+├── requirements.txt
+├── start.sh
+├── tests/
+│   └── test_app.py
+└── templates/
+    └── index.html
+```
