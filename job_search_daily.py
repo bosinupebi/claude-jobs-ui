@@ -116,6 +116,10 @@ css: |
 
 README_FIT_PLACEHOLDER = "*(Auto-generated — review and customise before applying)*"
 DEFAULT_TEXT_GENERATION_TIMEOUT = 120
+DEFAULT_RESUME_GENERATION_TIMEOUT = 300
+DEFAULT_RESUME_RETRY_TIMEOUT = 420
+DEFAULT_COVER_LETTER_SOURCE_MAX_CHARS = 1800
+DEFAULT_RESUME_SOURCE_MAX_CHARS = 2200
 DEFAULT_ANTHROPIC_MODEL_FALLBACK = "claude-haiku-4-5-20251001"
 DEFAULT_GENERATION_PROVIDER_ORDER = ["claude_cli", "anthropic_api", "codex_cli"]
 SUPPORTED_GENERATION_PROVIDERS = set(DEFAULT_GENERATION_PROVIDER_ORDER)
@@ -1135,13 +1139,54 @@ def _get_codex_model_fallback(config: dict) -> str:
     return str(tools.get("codex_model_fallback", "") or "").strip()
 
 
-def generate_with_claude_cli(prompt: str, config: dict, logger: logging.Logger) -> str | None:
+def _coerce_positive_int(value: object, default: int) -> int:
+    """Return a positive integer from config, or the default when unset/invalid."""
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _get_text_generation_timeout(config: dict) -> int:
+    """Read the default document-generation timeout from config."""
+    tools = config.get("tools", {})
+    return _coerce_positive_int(
+        tools.get("text_generation_timeout_seconds"),
+        DEFAULT_TEXT_GENERATION_TIMEOUT,
+    )
+
+
+def _get_resume_generation_timeout(config: dict) -> int:
+    """Read the primary timeout used for resume generation."""
+    tools = config.get("tools", {})
+    return _coerce_positive_int(
+        tools.get("resume_generation_timeout_seconds"),
+        DEFAULT_RESUME_GENERATION_TIMEOUT,
+    )
+
+
+def _get_resume_retry_timeout(config: dict) -> int:
+    """Read the retry timeout used for the compact resume prompt."""
+    tools = config.get("tools", {})
+    return _coerce_positive_int(
+        tools.get("resume_retry_timeout_seconds"),
+        DEFAULT_RESUME_RETRY_TIMEOUT,
+    )
+
+
+def generate_with_claude_cli(
+    prompt: str,
+    config: dict,
+    logger: logging.Logger,
+    timeout_seconds: int = DEFAULT_TEXT_GENERATION_TIMEOUT,
+) -> str | None:
     """
     Generate text using the locally installed claude CLI.
 
     Calls: claude -p "<prompt>" --output-format text
     This is non-interactive (print mode) — no API key required.
-    Times out after 120 seconds.
+    Times out after timeout_seconds.
 
     Returns the generated text, or None on failure.
     """
@@ -1155,7 +1200,7 @@ def generate_with_claude_cli(prompt: str, config: dict, logger: logging.Logger) 
             [claude_bin, "-p", TEXT_GENERATION_PREAMBLE + prompt, "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=DEFAULT_TEXT_GENERATION_TIMEOUT,
+            timeout=timeout_seconds,
             cwd=str(Path.home()),
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -1164,7 +1209,7 @@ def generate_with_claude_cli(prompt: str, config: dict, logger: logging.Logger) 
             logger.warning(f"claude CLI returned code {result.returncode}: {result.stderr[:200]}")
             return None
     except subprocess.TimeoutExpired:
-        logger.warning("claude CLI timed out after 120s")
+        logger.warning(f"claude CLI timed out after {timeout_seconds}s")
         return None
     except Exception as exc:
         logger.warning(f"claude CLI error: {exc}")
@@ -1201,7 +1246,13 @@ def generate_with_anthropic_api(prompt: str, model: str, logger: logging.Logger)
         return None
 
 
-def generate_with_codex_cli(prompt: str, model: str, config: dict, logger: logging.Logger) -> str | None:
+def generate_with_codex_cli(
+    prompt: str,
+    model: str,
+    config: dict,
+    logger: logging.Logger,
+    timeout_seconds: int = DEFAULT_TEXT_GENERATION_TIMEOUT,
+) -> str | None:
     """
     Generate text using the locally installed Codex CLI.
 
@@ -1233,7 +1284,7 @@ def generate_with_codex_cli(prompt: str, model: str, config: dict, logger: loggi
             input=TEXT_GENERATION_PREAMBLE + prompt,
             capture_output=True,
             text=True,
-            timeout=DEFAULT_TEXT_GENERATION_TIMEOUT,
+            timeout=timeout_seconds,
             cwd=str(Path.home()),
         )
         if result.returncode == 0 and result.stdout.strip():
@@ -1243,25 +1294,31 @@ def generate_with_codex_cli(prompt: str, model: str, config: dict, logger: loggi
         logger.warning(f"codex exec returned code {result.returncode}: {stderr_preview}")
         return None
     except subprocess.TimeoutExpired:
-        logger.warning("codex exec timed out after 120s")
+        logger.warning(f"codex exec timed out after {timeout_seconds}s")
         return None
     except Exception as exc:
         logger.warning(f"codex exec error: {exc}")
         return None
 
 
-def generate_text(prompt: str, config: dict, logger: logging.Logger) -> str | None:
+def generate_text(
+    prompt: str,
+    config: dict,
+    logger: logging.Logger,
+    timeout_seconds: int | None = None,
+) -> str | None:
     """
     Try configured text generation providers in order and return the first successful result.
     Caller handles the None case gracefully (README-only mode).
     """
     provider_order = _get_generation_provider_order(config, logger)
+    timeout_seconds = timeout_seconds or _get_text_generation_timeout(config)
 
     for idx, provider in enumerate(provider_order):
         logger.info(f"Text generation: trying {provider}")
 
         if provider == "claude_cli":
-            text = generate_with_claude_cli(prompt, config, logger)
+            text = generate_with_claude_cli(prompt, config, logger, timeout_seconds)
         elif provider == "anthropic_api":
             text = generate_with_anthropic_api(
                 prompt,
@@ -1274,6 +1331,7 @@ def generate_text(prompt: str, config: dict, logger: logging.Logger) -> str | No
                 _get_codex_model_fallback(config),
                 config,
                 logger,
+                timeout_seconds,
             )
         else:
             text = None
@@ -1347,7 +1405,15 @@ def _candidate_headline(candidate: dict) -> str:
     return "candidate"
 
 
-def _read_source_file(config: dict, tool_key: str) -> str:
+def _trim_source_text(text: str, max_chars: int | None) -> str:
+    """Trim embedded source documents to keep prompts bounded and readable."""
+    if not max_chars or len(text) <= max_chars:
+        return text
+    trimmed = text[:max_chars].rsplit(" ", 1)[0].rstrip()
+    return trimmed or text[:max_chars].rstrip()
+
+
+def _read_source_file(config: dict, tool_key: str, max_chars: int | None = None) -> str:
     """
     Read a candidate source document (PDF or plain text) identified by
     tools.<tool_key> in config.  Returns extracted text, or "" on any failure.
@@ -1363,13 +1429,16 @@ def _read_source_file(config: dict, tool_key: str) -> str:
             return ""
         try:
             reader = _pypdf.PdfReader(str(path))
-            return "\n".join(
+            return _trim_source_text("\n".join(
                 page.extract_text() or "" for page in reader.pages
-            ).strip()
+            ).strip(), max_chars)
         except Exception:
             return ""
     if path.suffix.lower() in (".txt", ".md"):
-        return path.read_text(encoding="utf-8", errors="ignore").strip()
+        return _trim_source_text(
+            path.read_text(encoding="utf-8", errors="ignore").strip(),
+            max_chars,
+        )
     return ""
 
 
@@ -1422,7 +1491,11 @@ def build_cover_letter_prompt(job: dict, config: dict) -> str:
     profile = build_profile_block(config)
     c = config["candidate"]
     headline = _candidate_headline(c)
-    source_text = _read_source_file(config, "cover_letter_source")
+    source_text = _read_source_file(
+        config,
+        "cover_letter_source",
+        DEFAULT_COVER_LETTER_SOURCE_MAX_CHARS,
+    )
     source_section = ""
     if source_text:
         source_section = f"""
@@ -1504,7 +1577,7 @@ Content rules:
 """.strip()
 
 
-def build_resume_prompt(job: dict, config: dict) -> str:
+def build_resume_prompt(job: dict, config: dict, include_resume_source: bool = True) -> str:
     """
     Build the prompt used to generate a tailored one-page resume.
     The output must include the PDF front matter block verbatim, then the resume content.
@@ -1512,7 +1585,14 @@ def build_resume_prompt(job: dict, config: dict) -> str:
     profile = build_profile_block(config)
     c = config["candidate"]
     headline = _candidate_headline(c)
-    resume_text = _read_source_file(config, "resume_source")
+    resume_text = (
+        _read_source_file(
+            config,
+            "resume_source",
+            DEFAULT_RESUME_SOURCE_MAX_CHARS,
+        )
+        if include_resume_source else ""
+    )
     resume_section = ""
     if resume_text:
         resume_section = f"""
@@ -1564,6 +1644,32 @@ ONE PAGE RULES — strictly enforced:
 - Bold all numbers/metrics: **100,000+**, **99% uptime**, **$250K**, **90%**, **40%**, **50%**, **70%**
 - Output ONLY the markdown (starting with ---), no preamble, no code fences, no explanations about file access or working directories
 """.strip()
+
+
+# ─── DOCUMENT-SPECIFIC GENERATION HELPERS ────────────────────────────────────
+
+def generate_resume_text(job: dict, config: dict, logger: logging.Logger) -> str | None:
+    """
+    Generate a resume with a retry path tuned for long prompts.
+    First attempt uses the embedded base resume. If that fails, retry once
+    with a compact prompt and a longer timeout.
+    """
+    primary_prompt = build_resume_prompt(job, config, include_resume_source=True)
+    primary_timeout = _get_resume_generation_timeout(config)
+    res_text = generate_text(primary_prompt, config, logger, timeout_seconds=primary_timeout)
+    if res_text:
+        return res_text
+
+    retry_prompt = build_resume_prompt(job, config, include_resume_source=False)
+    if retry_prompt == primary_prompt:
+        return None
+
+    retry_timeout = max(primary_timeout, _get_resume_retry_timeout(config))
+    logger.warning(
+        "  Primary resume prompt failed — retrying with a compact prompt and %ss timeout",
+        retry_timeout,
+    )
+    return generate_text(retry_prompt, config, logger, timeout_seconds=retry_timeout)
 
 
 # ─── FOLDER & FILE CREATION ───────────────────────────────────────────────────
@@ -1805,8 +1911,7 @@ def process_job(
         logger.warning(f"  ✗ cover letter generation failed — README only for this job")
 
     # Resume
-    res_prompt = build_resume_prompt(job, config)
-    res_text = generate_text(res_prompt, config, logger)
+    res_text = generate_resume_text(job, config, logger)
     if res_text:
         res_path = write_resume(folder, res_text, candidate_name)
         summary["resume"] = True
