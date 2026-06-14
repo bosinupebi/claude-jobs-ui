@@ -38,17 +38,17 @@ The UI tabs cover:
 
 ## Requirements
 
-- Python 3.8+
-- `pip3 install -r requirements.txt`
-- `md-to-pdf` installed globally if you want PDF generation: `npm install -g md-to-pdf`
+- [Python 3.8+](https://www.python.org/downloads/)
+- Python dependencies from [`requirements.txt`](requirements.txt): `pip3 install -r requirements.txt`
+- [md-to-pdf](https://www.npmjs.com/package/md-to-pdf) installed globally if you want PDF generation: `npm install -g md-to-pdf`
 
 Optional integrations:
 
-- At least one generation path is recommended: Claude CLI, Anthropic API, Codex CLI, or deterministic fallback documents.
-- `claude` CLI if you want Claude available as one document-generation provider.
-- `codex` CLI if you want Codex available as one document-generation provider.
-- `ANTHROPIC_API_KEY` for Anthropic API fallback.
-- `SERPAPI_KEY` for Google Jobs via SerpAPI.
+- At least one generation path is recommended: [Claude CLI](https://docs.anthropic.com/en/docs/claude-code), [Anthropic API](https://docs.anthropic.com/en/api/overview), [Codex CLI](https://developers.openai.com/codex/cli), or [`tools.deterministic_fallback_documents`](#key-config-fields).
+- [`claude` CLI](https://docs.anthropic.com/en/docs/claude-code) if you want Claude available as one document-generation provider.
+- [`codex` CLI](https://developers.openai.com/codex/cli) if you want Codex available as one document-generation provider.
+- [`ANTHROPIC_API_KEY`](https://docs.anthropic.com/en/api/admin-api/apikeys/get-api-key) for Anthropic API fallback.
+- [`SERPAPI_KEY`](https://serpapi.com/manage-api-key) for Google Jobs via [SerpAPI](https://serpapi.com/google-jobs-api).
 
 ## Getting Started
 
