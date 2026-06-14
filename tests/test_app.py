@@ -80,7 +80,13 @@ MINIMAL_CONFIG = {
             "codex_cli",
         ],
         "cover_letter_source": "",
+        "deterministic_fallback_documents": True,
+        "fast_generation_mode": False,
+        "include_source_documents_in_fast_mode": False,
         "resume_source": "",
+        "resume_generation_timeout_seconds": 300,
+        "resume_retry_timeout_seconds": 420,
+        "text_generation_timeout_seconds": 120,
     },
     "disabled_sources": [],
 }
@@ -117,7 +123,15 @@ def flask_client(config_file, settings_file, logs_dir):
 
     with patch.object(flask_app, "CONFIG_FILE", config_file), patch.object(
         flask_app, "SETTINGS_FILE", settings_file
-    ), patch.object(flask_app, "LOGS_DIR", logs_dir):
+    ), patch.object(flask_app, "LOGS_DIR", logs_dir), patch.object(
+        flask_app, "BASE_DIR", config_file.parent
+    ), patch.object(
+        flask_app, "PIPELINE_SCRIPT", config_file.parent / "job_search_daily.py"
+    ), patch.object(
+        flask_app, "RUN_DAILY_SCRIPT", config_file.parent / "run_daily.sh"
+    ), patch.object(
+        flask_app, "_run_state", {"running": False, "pid": None, "exit_code": None}
+    ):
         flask_app.app.config["TESTING"] = True
         with flask_app.app.test_client() as client:
             yield client, config_file, settings_file, logs_dir
@@ -171,12 +185,16 @@ class TestGetConfig:
             assert key in data["config"], f"Missing key: {key}"
 
     def test_meta_contains_paths_and_plist_name(self, flask_client):
-        client, _, _, _ = flask_client
+        client, cfg_path, _, _ = flask_client
         meta = client.get("/api/config").get_json()["meta"]
         assert "pipeline_dir" in meta
         assert "plist_path" in meta
         assert "plist_name" in meta
+        assert "run_daily_path" in meta
         assert "launch_agents_dir" in meta
+        plist = Path(meta["plist_path"])
+        assert plist.exists()
+        assert str(cfg_path.parent / "run_daily.sh") in plist.read_text()
 
     def test_503_when_config_missing(self, tmp_path, settings_file, logs_dir):
         import app as flask_app
@@ -259,6 +277,12 @@ class TestSaveConfig:
         ]
         payload["tools"]["anthropic_model_fallback"] = "claude-sonnet-4-20250514"
         payload["tools"]["codex_model_fallback"] = "gpt-5.4"
+        payload["tools"]["fast_generation_mode"] = True
+        payload["tools"]["include_source_documents_in_fast_mode"] = True
+        payload["tools"]["deterministic_fallback_documents"] = False
+        payload["tools"]["text_generation_timeout_seconds"] = 90
+        payload["tools"]["resume_generation_timeout_seconds"] = 180
+        payload["tools"]["resume_retry_timeout_seconds"] = 240
         res = client.post("/api/config", json=payload)
         assert res.status_code == 200
         saved = json.loads(cfg_path.read_text())
@@ -269,6 +293,54 @@ class TestSaveConfig:
         ]
         assert saved["tools"]["anthropic_model_fallback"] == "claude-sonnet-4-20250514"
         assert saved["tools"]["codex_model_fallback"] == "gpt-5.4"
+        assert saved["tools"]["fast_generation_mode"] is True
+        assert saved["tools"]["include_source_documents_in_fast_mode"] is True
+        assert saved["tools"]["deterministic_fallback_documents"] is False
+        assert saved["tools"]["text_generation_timeout_seconds"] == 90
+        assert saved["tools"]["resume_generation_timeout_seconds"] == 180
+        assert saved["tools"]["resume_retry_timeout_seconds"] == 240
+
+
+class TestRunPipeline:
+    def test_passes_run_overrides_to_pipeline(self, flask_client):
+        client, cfg_path, _, _ = flask_client
+
+        class FakeProc:
+            pid = 123
+
+            def wait(self):
+                return 0
+
+        import app as flask_app
+
+        with patch.object(flask_app.subprocess, "Popen", return_value=FakeProc()) as popen:
+            res = client.post(
+                "/api/run",
+                json={
+                    "dry_run": True,
+                    "force": True,
+                    "date": "2026-03-22",
+                    "max_results": "3",
+                },
+            )
+
+        assert res.status_code == 200
+        args = popen.call_args.args[0]
+        assert str(cfg_path.parent / "job_search_daily.py") in args
+        assert "--dry-run" in args
+        assert "--force" in args
+        assert args[args.index("--date") + 1] == "2026-03-22"
+        assert args[args.index("--max-results") + 1] == "3"
+
+    def test_rejects_invalid_run_date(self, flask_client):
+        client, _, _, _ = flask_client
+        res = client.post("/api/run", json={"date": "03-22-2026"})
+        assert res.status_code == 400
+
+    def test_rejects_invalid_max_results(self, flask_client):
+        client, _, _, _ = flask_client
+        res = client.post("/api/run", json={"max_results": "0"})
+        assert res.status_code == 400
 
 
 class TestStatus:

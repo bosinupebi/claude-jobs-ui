@@ -1,105 +1,129 @@
 # claude-jobs-ui
 
-`claude-jobs-ui` is a self-contained Flask app plus job-search pipeline. It gives you a browser UI for editing `config.json`, running the pipeline manually, reviewing generated job folders, and copying launchd commands without hand-editing JSON or wiring the app to an external scripts directory.
+`claude-jobs-ui` is a self-contained Flask app plus autonomous job-search pipeline. It gives you a browser UI for editing `config.json`, running searches manually, reviewing generated job folders, and installing a daily macOS `launchd` scheduler without hand-editing JSON.
 
-## What This Repo Does
+Despite the repository name, the workflow is agent-agnostic. The UI, terminal, `launchd`, cron, Codex, Claude, or any other automation agent can run `job_search_daily.py`; the configured generation providers only control how documents are drafted.
 
-The repo bundles both the UI and the pipeline in one place:
+## What It Includes
 
-- `app.py` serves the web UI and persists config changes
-- `job_search_daily.py` fetches jobs, scores them, generates application materials, and writes dated output folders
-- `config.json` holds the editable candidate, source, search, scoring, cleanup, and tool settings
+- `app.py` serves the web UI, persists config changes, starts pipeline runs, and generates a checkout-specific launchd plist.
+- `job_search_daily.py` fetches jobs, scores them, validates links, generates application materials, and writes dated output folders.
+- `run_daily.sh` is the launchd/cron wrapper. It loads `.env`, fixes `PATH`, writes runner logs, and invokes the pipeline from any scheduler or agent.
+- `config.json` contains editable candidate, source, search, scoring, cleanup, and generation settings.
 
-The UI includes these tabs:
+The UI tabs cover:
 
-- `Run` for manual runs and live log polling
-- `Results` for browsing generated jobs and README details
-- `Profile` for contact info, experience, education, source documents, and text-generation settings
-- `Sources` for toggling/editing built-in job sources
-- `Search` for location, age, and filtering controls
-- `Scoring` for keyword tiers and remote bonus
-- `Cleanup` for dated-folder retention rules
-- `Setup` for copy-paste launchd commands
+- `Run`: dry runs, full runs, force reprocessing, date override, max-results override, and live log polling.
+- `Results`: generated job folders, README details, apply links, and PDF status badges.
+- `Profile`: contact info, experience, education, source document paths, provider order, models, fast mode, fallback documents, and timeouts.
+- `Sources`: toggles and editable settings for all built-in sources.
+- `Search`: location, job age, result count, and exclude-keyword controls.
+- `Scoring`: Tier 1/Tier 2 keywords, bonus keywords, thresholds, and remote bonus.
+- `Cleanup`: dated-folder retention settings with applied-job protection.
+- `Setup`: copy-paste commands for launchd install, manual runs, dry runs, logs, and uninstall.
 
-## Pipeline Highlights
+## Pipeline Features
 
-The pipeline now supports:
-
-- Source toggles via `disabled_sources`
-- New built-in sources: `career_sites`, `themuse`, and `serpapi`
-- Generation provider chaining with `claude_cli`, `anthropic_api`, and `codex_cli`
-- Optional source-document ingestion for cover-letter and resume generation
-- Auto-generated README strong-fit bullets
-- ATS-aware versus direct-human prompt behavior depending on source
-- Relative posted-date parsing like `today`, `yesterday`, and `3 days ago`
-- Cleanup protection for dated folders containing jobs already marked applied
+- Source toggles via `disabled_sources`.
+- Built-in sources: Job Bank Canada, Remotive, RemoteOK, Himalayas, Real Work From Anywhere, Jobicy, Indeed RSS, career sites, The Muse, and Google Jobs via SerpAPI.
+- Career-site ingestion for Ashby, Greenhouse, Lever, and Recruitee public job boards.
+- Relative posted-date parsing such as `today`, `yesterday`, and `3 days ago`.
+- Two-phase filtering: title relevance first, then full-description fetching and scoring.
+- URL validation before generating application materials.
+- Provider chaining across `claude_cli`, `anthropic_api`, and `codex_cli`.
+- Fast generation mode to avoid embedding source PDFs during local CLI fallback runs.
+- Optional deterministic markdown fallback documents when all model providers fail.
+- Company-specific output filenames, for example `your-name-company-cover-letter.pdf`.
+- Cleanup preservation for dated folders containing jobs marked `- [x] Applied`.
 
 ## Requirements
 
 - Python 3.8+
 - `pip3 install -r requirements.txt`
-- `md-to-pdf` installed globally if you want PDF generation
+- `md-to-pdf` installed globally if you want PDF generation: `npm install -g md-to-pdf`
 
 Optional integrations:
 
-- `ANTHROPIC_API_KEY` for Anthropic API fallback
-- `SERPAPI_KEY` for Google Jobs via SerpAPI
-- local `claude` CLI and/or `codex` CLI if you want CLI-first generation
+- At least one generation path is recommended: Claude CLI, Anthropic API, Codex CLI, or deterministic fallback documents.
+- `claude` CLI if you want Claude available as one document-generation provider.
+- `codex` CLI if you want Codex available as one document-generation provider.
+- `ANTHROPIC_API_KEY` for Anthropic API fallback.
+- `SERPAPI_KEY` for Google Jobs via SerpAPI.
 
 ## Getting Started
 
 ```bash
+cp .env.example .env
 pip3 install -r requirements.txt
 bash start.sh
 ```
 
-The app starts on `http://localhost:5050` by default.
+The app starts on `http://localhost:5050` by default, or `5051` if `5050` is already in use.
+
+## Running The Pipeline
+
+From the UI, use the `Run` tab.
+
+From the terminal:
+
+```bash
+python3 job_search_daily.py
+python3 job_search_daily.py --dry-run
+python3 job_search_daily.py --force
+python3 job_search_daily.py --date 2026-03-22
+python3 job_search_daily.py --force --date 2026-03-22 --max-results 3
+```
+
+## Output
+
+```text
+claude-jobs-ui/
+├── 2026-03-22/
+│   └── 01-company-role/
+│       ├── README.md
+│       ├── your-name-company-cover-letter.md
+│       ├── your-name-company-cover-letter.pdf
+│       ├── your-name-company-resume.md
+│       └── your-name-company-resume.pdf
+├── logs/
+│   ├── 2026-03-22.log
+│   └── runner.log
+└── seen_jobs.json
+```
+
+Runtime output, generated plist files, logs, `.env`, and `seen_jobs.json` are ignored by git.
 
 ## Key Config Fields
 
-Important newer config fields include:
+- `candidate`: profile, skills, experience, education, and contact details used in generated documents.
+- `disabled_sources`: source keys skipped during runs.
+- `search.max_results_per_tier`: default number of ranked jobs to process per run.
+- `search.max_job_age_days`: posted-date freshness filter.
+- `sources.career_sites.feeds`: company career-page URLs.
+- `sources.serpapi`: Google Jobs queries and SerpAPI locations.
+- `scoring.tier1_keywords`, `scoring.tier2_keywords`, and `scoring.remote_bonus`: ranking behavior.
+- `tools.generation_provider_order`: generation preference order.
+- `tools.fast_generation_mode`: skip source documents by default for faster prompts.
+- `tools.include_source_documents_in_fast_mode`: embed source documents even in fast mode.
+- `tools.deterministic_fallback_documents`: write template-based documents if model generation fails.
+- `tools.text_generation_timeout_seconds`, `tools.resume_generation_timeout_seconds`, and `tools.resume_retry_timeout_seconds`: generation timeouts.
 
-- `tools.generation_provider_order`
-- `tools.anthropic_model_fallback`
-- `tools.codex_model_fallback`
-- `tools.cover_letter_source`
-- `tools.resume_source`
-- `search.locations`
-- `sources.career_sites.feeds`
-- `sources.themuse`
-- `sources.serpapi`
-- `disabled_sources`
+Saves are atomic and create `config.json.bak`.
 
-Saves are atomic and also create `config.json.bak`.
+## Daily Scheduling
 
-## Built-In Sources
+Open the `Setup` tab after starting the app. The app generates a launchd plist for the current checkout path and shows commands to:
 
-This repo ships with editable support for:
+- check whether the service is installed
+- copy the plist into `~/Library/LaunchAgents`
+- load the service
+- run the pipeline manually
+- view logs
+- uninstall the service
 
-- `jobbank`
-- `remotive`
-- `remoteok`
-- `himalayas`
-- `realworkfromanywhere`
-- `jobicy`
-- `indeed`
-- `career_sites`
-- `themuse`
-- `serpapi`
+The generated plist runs `run_daily.sh` every day at 08:00 local time.
 
-`serpapi` only runs when `SERPAPI_KEY` is present.
-
-## Generation Behavior
-
-The default text-generation chain is:
-
-1. `claude_cli`
-2. `anthropic_api`
-3. `codex_cli`
-
-You can reorder that chain in the UI. The pipeline tries providers in order and stops on the first successful result.
-
-## Running Tests
+## Tests
 
 ```bash
 pip3 install pytest
@@ -110,10 +134,12 @@ PYTHONDONTWRITEBYTECODE=1 pytest -p no:cacheprovider tests/test_app.py -q
 
 ```text
 claude-jobs-ui/
+├── .env.example
 ├── app.py
 ├── config.json
 ├── job_search_daily.py
 ├── requirements.txt
+├── run_daily.sh
 ├── start.sh
 ├── tests/
 │   └── test_app.py

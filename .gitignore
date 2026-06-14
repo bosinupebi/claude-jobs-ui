@@ -66,7 +66,13 @@ coverage.xml
 instance/
 
 # Logs (local run artefacts — not part of the repo)
+logs/
 *.log
+
+# Pipeline output and generated scheduler files
+20??-??-??/
+seen_jobs.json
+*.plist
 
 # Temp / backup files written by the app itself
 config.json.bak

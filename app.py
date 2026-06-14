@@ -15,6 +15,7 @@ import sys
 import threading
 from datetime import date
 from pathlib import Path
+from xml.sax.saxutils import escape as xml_escape
 
 from flask import Flask, jsonify, render_template, request
 
@@ -23,6 +24,7 @@ CONFIG_FILE = BASE_DIR / "config.json"
 SETTINGS_FILE = BASE_DIR / "settings.json"
 LOGS_DIR = BASE_DIR / "logs"
 PIPELINE_SCRIPT = BASE_DIR / "job_search_daily.py"
+RUN_DAILY_SCRIPT = BASE_DIR / "run_daily.sh"
 
 PLIST_NAME_DEFAULT = "com.example.jobsearch.plist"
 REQUIRED_KEYS = {"candidate", "search", "sources", "scoring", "cleanup", "tools"}
@@ -57,6 +59,67 @@ def get_settings():
     return {}
 
 
+def _normalise_plist_name(value) -> str:
+    """Return a safe launchd plist filename."""
+    name = (value or PLIST_NAME_DEFAULT).strip()
+    if not re.match(r"^[A-Za-z0-9_.-]+$", name):
+        name = PLIST_NAME_DEFAULT
+    if not name.endswith(".plist"):
+        name += ".plist"
+    return name
+
+
+def _ensure_plist(plist_name: str) -> Path:
+    """Write a launchd plist for this checkout and return its path."""
+    plist_name = _normalise_plist_name(plist_name)
+    service_id = plist_name[:-6]
+    plist_path = BASE_DIR / plist_name
+    log_dir = Path.home() / "Library" / "Logs"
+    home = Path.home()
+    content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>{xml_escape(service_id)}</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>{xml_escape(str(RUN_DAILY_SCRIPT))}</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>{xml_escape(str(BASE_DIR))}</string>
+
+  <key>StandardOutPath</key>
+  <string>{xml_escape(str(log_dir / f"{service_id}.log"))}</string>
+  <key>StandardErrorPath</key>
+  <string>{xml_escape(str(log_dir / f"{service_id}.error.log"))}</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{xml_escape(str(home / ".nvm/versions/node/v23.1.0/bin"))}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>{xml_escape(str(home))}</string>
+  </dict>
+</dict>
+</plist>
+"""
+    plist_path.write_text(content, encoding="utf-8")
+    return plist_path
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -68,7 +131,7 @@ def index():
 def get_settings_endpoint():
     s = get_settings()
     return jsonify({
-        "plist_name": s.get("plist_name", PLIST_NAME_DEFAULT),
+        "plist_name": _normalise_plist_name(s.get("plist_name")),
     })
 
 
@@ -77,7 +140,8 @@ def save_settings():
     data = request.get_json(force=True) or {}
     settings = get_settings()
     if data.get("plist_name"):
-        settings["plist_name"] = data["plist_name"]
+        settings["plist_name"] = _normalise_plist_name(data["plist_name"])
+        _ensure_plist(settings["plist_name"])
     SETTINGS_FILE.write_text(json.dumps(settings, indent=2, ensure_ascii=False), encoding="utf-8")
     return jsonify({"ok": True})
 
@@ -89,14 +153,16 @@ def get_config():
 
     cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
     settings = get_settings()
-    plist_name = settings.get("plist_name", PLIST_NAME_DEFAULT)
+    plist_name = _normalise_plist_name(settings.get("plist_name"))
+    plist_path = _ensure_plist(plist_name)
 
     return jsonify({
         "config": cfg,
         "meta": {
             "pipeline_dir": str(BASE_DIR),
             "plist_name": plist_name,
-            "plist_path": str(BASE_DIR / plist_name),
+            "plist_path": str(plist_path),
+            "run_daily_path": str(RUN_DAILY_SCRIPT),
             "launch_agents_dir": str(Path.home() / "Library" / "LaunchAgents"),
         },
     })
@@ -138,6 +204,20 @@ def run_pipeline():
             args.append("--dry-run")
         if data.get("force"):
             args.append("--force")
+        run_date = data.get("date") or data.get("run_date")
+        if run_date:
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", str(run_date)):
+                return jsonify({"error": "Invalid run date. Use YYYY-MM-DD."}), 400
+            args.extend(["--date", str(run_date)])
+        max_results = data.get("max_results")
+        if max_results not in (None, ""):
+            try:
+                max_results_int = int(max_results)
+            except (TypeError, ValueError):
+                return jsonify({"error": "max_results must be a positive integer."}), 400
+            if max_results_int < 1:
+                return jsonify({"error": "max_results must be a positive integer."}), 400
+            args.extend(["--max-results", str(max_results_int)])
 
         try:
             proc = subprocess.Popen(
@@ -209,8 +289,8 @@ def list_jobs():
                 "tier": meta.get("tier", ""),
                 "score": meta.get("score", ""),
                 "url": meta.get("url", ""),
-                "has_cover": (job_dir / "cover-letter.pdf").exists(),
-                "has_resume": (job_dir / "resume.pdf").exists(),
+                "has_cover": any(job_dir.glob("*cover-letter.pdf")),
+                "has_resume": any(job_dir.glob("*resume.pdf")),
             })
 
         if jobs:

@@ -14,9 +14,9 @@ fi
 echo "Checking Python dependencies..."
 pip3 install -r requirements.txt --break-system-packages -q 2>/dev/null || pip3 install -r requirements.txt -q
 
-# Check for claude CLI (needed for document generation)
-if ! command -v claude &>/dev/null; then
-  echo "Warning: 'claude' CLI not found. Document generation will use the Anthropic SDK fallback." >&2
+# Check for local generation CLIs. They are optional if another provider or fallback is configured.
+if ! command -v claude &>/dev/null && ! command -v codex &>/dev/null; then
+  echo "Warning: neither 'claude' nor 'codex' CLI was found. Document generation will use any configured API provider or deterministic fallback." >&2
 fi
 
 # Check for md-to-pdf (needed for PDF generation)

@@ -94,7 +94,7 @@
   "sources": {
     "_comment": "All sources are free; SerpAPI only runs if SERPAPI_KEY is set.",
     "career_sites": {
-      "_comment": "Company career page URLs. Supports Ashby, Greenhouse, and Lever automatically.",
+      "_comment": "Company career page URLs. Supports Ashby, Greenhouse, Lever, and Recruitee automatically.",
       "feeds": []
     },
     "himalayas": {
@@ -168,12 +168,18 @@
     "claude_cli": "claude",
     "codex_model_fallback": "gpt-5.4-mini",
     "cover_letter_source": "",
+    "deterministic_fallback_documents": true,
+    "fast_generation_mode": false,
     "generation_provider_order": [
       "claude_cli",
       "anthropic_api",
       "codex_cli"
     ],
+    "include_source_documents_in_fast_mode": false,
     "md_to_pdf": "md-to-pdf",
-    "resume_source": ""
+    "resume_generation_timeout_seconds": 300,
+    "resume_retry_timeout_seconds": 420,
+    "resume_source": "",
+    "text_generation_timeout_seconds": 120
   }
 }

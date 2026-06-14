@@ -142,6 +142,22 @@
           </div>
         </div>
         <div class="card-body p-0">
+          <div class="row g-3 align-items-end p-3 border-bottom bg-white">
+            <div class="col-md-3">
+              <div class="form-check">
+                <input id="run-force" class="form-check-input" type="checkbox">
+                <label class="form-check-label" for="run-force">Ignore seen jobs</label>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small">Date Override</label>
+              <input id="run-date" class="form-control form-control-sm" type="date">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label small">Max Results Override</label>
+              <input id="run-max-results" class="form-control form-control-sm" type="number" min="1" max="20" placeholder="Config default">
+            </div>
+          </div>
           <div id="run-log">Waiting for a run...</div>
         </div>
       </div>
@@ -232,8 +248,8 @@
         <div class="card-header fw-semibold">Generation</div>
         <div class="card-body">
           <p class="text-muted small mb-3">
-            The pipeline tries providers from top to bottom. Claude CLI runs locally first, Anthropic API uses
-            <code>ANTHROPIC_API_KEY</code>, and Codex CLI uses your local Codex login.
+            The pipeline tries providers from top to bottom. Use Claude CLI, Anthropic API with
+            <code>ANTHROPIC_API_KEY</code>, Codex CLI, or template fallback documents depending on your setup.
           </p>
           <div class="mb-4">
             <label class="form-label">Provider Order</label>
@@ -249,6 +265,43 @@
               <label class="form-label">Codex Fallback Model</label>
               <input id="g-codex-model" class="form-control" placeholder="gpt-5.4-mini" oninput="markDirty()">
               <div class="form-text">Leave blank to use the local Codex CLI default model.</div>
+            </div>
+          </div>
+          <div class="row g-3 mt-3">
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input id="g-fast-mode" class="form-check-input" type="checkbox" onchange="markDirty()">
+                <label class="form-check-label" for="g-fast-mode">Fast generation mode</label>
+              </div>
+              <div class="form-text">Skip source documents by default for faster CLI fallback runs.</div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input id="g-include-source-fast" class="form-check-input" type="checkbox" onchange="markDirty()">
+                <label class="form-check-label" for="g-include-source-fast">Include sources in fast mode</label>
+              </div>
+              <div class="form-text">Embed source PDFs even when fast mode is enabled.</div>
+            </div>
+            <div class="col-md-4">
+              <div class="form-check form-switch">
+                <input id="g-deterministic-fallback" class="form-check-input" type="checkbox" onchange="markDirty()">
+                <label class="form-check-label" for="g-deterministic-fallback">Template fallback documents</label>
+              </div>
+              <div class="form-text">Write deterministic markdown if all model providers fail.</div>
+            </div>
+          </div>
+          <div class="row g-3 mt-3">
+            <div class="col-md-4">
+              <label class="form-label">Text Timeout Seconds</label>
+              <input id="g-text-timeout" class="form-control" type="number" min="10" max="900" oninput="markDirty()">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Resume Timeout Seconds</label>
+              <input id="g-resume-timeout" class="form-control" type="number" min="10" max="1200" oninput="markDirty()">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Resume Retry Timeout Seconds</label>
+              <input id="g-resume-retry-timeout" class="form-control" type="number" min="10" max="1200" oninput="markDirty()">
             </div>
           </div>
         </div>
@@ -683,6 +736,12 @@ function populateGeneration(tools) {
   document.getElementById('g-anthropic-model').value =
     tools.anthropic_model_fallback || tools.claude_model_fallback || '';
   document.getElementById('g-codex-model').value = tools.codex_model_fallback || '';
+  document.getElementById('g-fast-mode').checked = !!tools.fast_generation_mode;
+  document.getElementById('g-include-source-fast').checked = !!tools.include_source_documents_in_fast_mode;
+  document.getElementById('g-deterministic-fallback').checked = tools.deterministic_fallback_documents !== false;
+  document.getElementById('g-text-timeout').value = tools.text_generation_timeout_seconds || 120;
+  document.getElementById('g-resume-timeout').value = tools.resume_generation_timeout_seconds || 300;
+  document.getElementById('g-resume-retry-timeout').value = tools.resume_retry_timeout_seconds || 420;
 }
 
 // ── Experience ──────────────────────────────────────────────────────────────
@@ -1120,6 +1179,9 @@ async function saveSettings() {
 function setRunUI(running) {
   document.getElementById('btn-run').disabled     = running;
   document.getElementById('btn-dry-run').disabled = running;
+  document.getElementById('run-force').disabled = running;
+  document.getElementById('run-date').disabled = running;
+  document.getElementById('run-max-results').disabled = running;
 }
 
 function setRunDot(state) {
@@ -1134,11 +1196,17 @@ async function startRun(dryRun) {
   setRunUI(true);
   setRunDot('running');
   document.getElementById('run-log').textContent = dryRun ? '— Dry run starting… —\n' : '— Run starting… —\n';
+  const payload = {
+    dry_run: dryRun,
+    force: document.getElementById('run-force').checked,
+    date: document.getElementById('run-date').value,
+    max_results: document.getElementById('run-max-results').value,
+  };
   try {
     const res  = await fetch('/api/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dry_run: dryRun }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -1303,6 +1371,12 @@ function collectAll() {
   out.tools.generation_provider_order = collectGenerationProviderOrder();
   out.tools.anthropic_model_fallback = document.getElementById('g-anthropic-model').value.trim();
   out.tools.codex_model_fallback = document.getElementById('g-codex-model').value.trim();
+  out.tools.fast_generation_mode = document.getElementById('g-fast-mode').checked;
+  out.tools.include_source_documents_in_fast_mode = document.getElementById('g-include-source-fast').checked;
+  out.tools.deterministic_fallback_documents = document.getElementById('g-deterministic-fallback').checked;
+  out.tools.text_generation_timeout_seconds = parseInt(document.getElementById('g-text-timeout').value) || 120;
+  out.tools.resume_generation_timeout_seconds = parseInt(document.getElementById('g-resume-timeout').value) || 300;
+  out.tools.resume_retry_timeout_seconds = parseInt(document.getElementById('g-resume-retry-timeout').value) || 420;
   delete out.tools.claude_model_fallback;
 
   // Sources
